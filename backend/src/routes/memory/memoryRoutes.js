@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
-const { addMemory, getAllMemories } = require("../../controllers/memory/memoryController");
+const { generateStory, addMemory, getAllMemories } = require("../../controllers/memory/memoryController");
+
+router.post("/generate", generateStory);
 
 // @route POST /api/memories
 router.post("/", addMemory);
