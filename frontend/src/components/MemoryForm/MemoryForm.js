@@ -34,30 +34,51 @@ const MemoryForm = ({ onAddMemory }) => {
 
   const handleGenerateStory = async () => {
     setErrorMsg("");
-    if (!mood || !occasion || !vibe || !locationType || !time || !city || !country) {
-      setErrorMsg("Please complete all fields before generating the memory.");
+  
+    if (
+      !imageFile ||
+      !mood ||
+      !occasion ||
+      !vibe ||
+      !locationType ||
+      !time ||
+      !city ||
+      !country
+    ) {
+      setErrorMsg("Please upload a photo and complete all fields before generating the memory.");
       return;
     }
-
+  
     setLoading(true);
-    try {
-      const res = await API.post("/memories/generate", {
-        mood,
-        occasion,
-        vibe,
-        location: locationType,
-        time,
-        city,
-        country,
-      });
-      setStory(res.data.story);
-    } catch (err) {
-      console.error("❌ GPT error:", err);
-      setErrorMsg("Something went wrong. Try again.");
-    } finally {
-      setLoading(false);
-    }
+  
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const base64Image = reader.result;
+  
+        const res = await API.post("/memories/generate", {
+          image: base64Image, // ✅ send base64 string to backend
+          mood,
+          occasion,
+          vibe,
+          location: locationType,
+          time,
+          city,
+          country,
+        });
+  
+        setStory(res.data.story);
+      } catch (err) {
+        console.error("❌ GPT error:", err);
+        setErrorMsg("Something went wrong. Try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+  
+    reader.readAsDataURL(imageFile);
   };
+  
 
   const handleSubmit = async (e) => {
     e.preventDefault();
