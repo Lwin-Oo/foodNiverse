@@ -32,14 +32,8 @@ const detectFoodType = async (base64Image) => {
 const generateStory = async (req, res) => {
   try {
     const {
-      image, // base64 image
-      mood,
-      occasion,
-      vibe,
-      location,
-      time,
-      city,
-      country
+      image, mood, occasion, vibe, location,
+      time, city, country, userNote, meaning
     } = req.body;
 
     if (!image || !mood || !occasion || !vibe || !location || !time || !city || !country) {
@@ -49,27 +43,40 @@ const generateStory = async (req, res) => {
     const foodType = await detectFoodType(image);
     console.log("🍜 Detected food:", foodType);
 
+    // Inject real-world tone guidance + examples
     const prompt = `
-You're a human writing realistic food memories.
+You're not an author — you're just someone reflecting on a meaningful food moment.
 
-Write a short, natural 1-2 sentence food memory for a photo of ${foodType}.
+Write 1–2 short, casual sentences about a real memory involving ${foodType}.
+Use a natural tone — not poetic, not dramatic. Don't over-explain. Just sound human.
 
 Details:
 - Mood: ${mood}
 - Occasion: ${occasion}
 - Vibe: ${vibe}
-- Location: ${location}
-- Time: ${time}
+- Location Type: ${location}
+- Time of Day: ${time}
 - City: ${city}
 - Country: ${country}
+${userNote ? `- Note from user: "${userNote}"` : ""}
+${meaning ? `- Memory Importance: ${meaning}/5` : ""}
 
-Make it human. No poems. No fancy language. Just something casual, honest, and short.
+Here are examples of the tone to follow:
+
+Example 1:
+“We baked a cake together that morning — not perfect, but it tasted like us.”
+
+Example 2:
+“Sushi on the curb after class. She laughed at how I couldn’t use chopsticks.”
+
+Now write the user's memory.
 `;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 60,
+      max_tokens: 100,
+      temperature: 0.75, // grounded, slightly expressive
     });
 
     const story = response.choices?.[0]?.message?.content?.trim();
@@ -80,11 +87,11 @@ Make it human. No poems. No fancy language. Just something casual, honest, and s
   }
 };
 
-
 // POST /api/memories
 const addMemory = async (req, res) => {
   try {
-    const { image, journal, tags } = req.body;
+    const { image, journal, tags, userNote, meaning } = req.body;
+
     if (!image || !journal) {
       return res.status(400).json({ message: "Missing required fields." });
     }
@@ -94,16 +101,20 @@ const addMemory = async (req, res) => {
       id: ref.id,
       image,
       journal,
-      tags,
+      tags: Array.isArray(tags) ? tags : [],
+      userNote: userNote?.trim() || "",
+      meaning: meaning || null,
       createdAt: new Date(),
     };
+
     await ref.set(memory);
     res.status(201).json({ message: "Memory saved", memory });
   } catch (err) {
-    console.error("Error saving memory:", err);
+    console.error("❌ Error saving memory:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 // GET /api/memories
 const getAllMemories = async (req, res) => {
