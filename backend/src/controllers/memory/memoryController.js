@@ -90,7 +90,7 @@ Now write the user's memory.
 // POST /api/memories
 const addMemory = async (req, res) => {
   try {
-    const { image, journal, tags, userNote, meaning } = req.body;
+    const { image, journal, tags, userNote, meaning, location, mood, vibe } = req.body;
 
     if (!image || !journal) {
       return res.status(400).json({ message: "Missing required fields." });
@@ -104,6 +104,9 @@ const addMemory = async (req, res) => {
       tags: Array.isArray(tags) ? tags : [],
       userNote: userNote?.trim() || "",
       meaning: meaning || null,
+      mood: mood || "",
+      vibe: vibe || "",
+      location: location || null,
       createdAt: new Date(),
     };
 
@@ -114,7 +117,6 @@ const addMemory = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
 
 // GET /api/memories
 const getAllMemories = async (req, res) => {

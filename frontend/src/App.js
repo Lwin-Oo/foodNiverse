@@ -8,7 +8,7 @@ import Chat from "./pages/Chat/Chat";
 function App() {
   return (
     <Router>
-      <div className="flex min-h-screen bg-gray-100">
+      <div className="flex min-h-screen">
         <Sidebar />
         <div className="flex-1 p-4">
           <Routes>
