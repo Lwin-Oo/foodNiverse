@@ -1,9 +1,13 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import API from "../../utils/api";
 import MemoryCard from "../../components/MemoryCard/MemoryCard";
+// import MemoryModal from "../../components/MemoryModal/MemoryModal";
+import MemoryPlayback from "../../components/MemoryPlayBack/MemoryPlayBack";
 
 const HomeFeed = () => {
   const [memories, setMemories] = useState([]);
+  const [activeMemory, setActiveMemory] = useState(null);
+
   const groupRefs = useRef({});
   const threadRefs = useRef({});
 
@@ -93,7 +97,9 @@ const HomeFeed = () => {
                         </div>
                       </div>
 
-                      <MemoryCard memory={memory} />
+                      <div onClick={() => setActiveMemory(memory)} className="cursor-pointer">
+                        <MemoryCard memory={memory} />
+                      </div>
                     </React.Fragment>
                   ))}
                 </div>
@@ -102,6 +108,12 @@ const HomeFeed = () => {
           </div>
         );
       })}
+      {activeMemory && (
+        <MemoryPlayback
+          memory={activeMemory}
+          onClose={() => setActiveMemory(null)}
+        />
+      )}
     </div>
   );
 };
