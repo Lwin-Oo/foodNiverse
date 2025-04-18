@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { generateStory, generateMusic, addMemory, getAllMemories } = require("../../controllers/memory/memoryController");
+const { generateStory, recommendSpotifyTrack, addMemory, getAllMemories } = require("../../controllers/memory/memoryController");
 
 router.post("/generate", generateStory);
 
@@ -11,6 +11,6 @@ router.post("/", addMemory);
 router.get("/", getAllMemories);
 
 // @route POST /api/memories/music
-router.post("/music", generateMusic);
+router.post("/music", recommendSpotifyTrack);
 
 module.exports = router;

@@ -61,6 +61,7 @@ const HomeFeed = () => {
     return acc;
   }, {});
 
+  
   return (
     <div className="flex flex-col gap-24 max-w-7xl mx-auto px-4 pt-10">
       {Object.entries(groupedMemories).map(([date, group], i) => {
