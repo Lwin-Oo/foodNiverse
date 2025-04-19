@@ -1,8 +1,5 @@
-import React, { useState } from "react";
-import usePlacesAutocomplete, {
-  getGeocode,
-  getLatLng,
-} from "use-places-autocomplete";
+import React, { useState, useEffect } from "react";
+import usePlacesAutocomplete, { getGeocode, getLatLng } from "use-places-autocomplete";
 import API from "../../utils/api";
 
 const moods = ["cozy", "excited", "nostalgic", "peaceful"];
@@ -14,8 +11,8 @@ const times = ["morning", "lunch", "evening", "midnight"];
 const MemoryForm = ({ onAddMemory }) => {
   const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
+
   const [story, setStory] = useState("");
-  const [tags, setTags] = useState("");
   const [mood, setMood] = useState("");
   const [occasion, setOccasion] = useState("");
   const [vibe, setVibe] = useState("");
@@ -24,16 +21,30 @@ const MemoryForm = ({ onAddMemory }) => {
   const [userNote, setUserNote] = useState("");
   const [meaning, setMeaning] = useState(null);
   const [selectedPlace, setSelectedPlace] = useState(null);
+
+  const [searchUserInput, setSearchUserInput] = useState("");
+  const [userResults, setUserResults] = useState([]);
+  const [pairedWith, setPairedWith] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const {
-    ready,
-    value,
-    setValue,
-    suggestions: { status, data },
-    clearSuggestions,
-  } = usePlacesAutocomplete({ debounce: 300 });
+  const { ready, value, setValue, suggestions: { status, data }, clearSuggestions } = usePlacesAutocomplete({ debounce: 300 });
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (!searchUserInput.trim()) return setUserResults([]);
+      try {
+        const res = await API.get(`/user?query=${searchUserInput}`);
+        setUserResults(res.data); 
+      } catch (err) {
+        console.error("❌ User search error:", err);
+      }
+    };
+    const timeout = setTimeout(fetchUsers, 300);
+    return () => clearTimeout(timeout);
+  }, [searchUserInput]);
+  
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -63,7 +74,7 @@ const MemoryForm = ({ onAddMemory }) => {
           location: locationType,
           time,
           city: selectedPlace?.description || "",
-          country: selectedPlace?.description || "", // TEMP for compatibility
+          country: selectedPlace?.description || "",
           userNote,
           meaning,
         });
@@ -81,13 +92,14 @@ const MemoryForm = ({ onAddMemory }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!imageFile || !story) return;
+
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         const res = await API.post("/memories", {
           image: reader.result,
           journal: story,
-          tags: tags.split(",").map((t) => t.trim()),
+          pairedWith,
           userNote,
           meaning,
           mood,
@@ -108,7 +120,6 @@ const MemoryForm = ({ onAddMemory }) => {
     setImageFile(null);
     setImageUrl(null);
     setStory("");
-    setTags("");
     setMood("");
     setOccasion("");
     setVibe("");
@@ -118,6 +129,9 @@ const MemoryForm = ({ onAddMemory }) => {
     setMeaning(null);
     setValue("");
     setSelectedPlace(null);
+    setSearchUserInput("");
+    setUserResults([]);
+    setPairedWith([]);
     setErrorMsg("");
   };
 
@@ -172,7 +186,7 @@ const MemoryForm = ({ onAddMemory }) => {
             value={value}
             onChange={(e) => {
               setValue(e.target.value);
-              setSelectedPlace(null); // reset selectedPlace if they start typing again
+              setSelectedPlace(null);
             }}
             disabled={!ready}
             className="w-full p-3 border border-gray-300 rounded-md text-sm"
@@ -184,10 +198,8 @@ const MemoryForm = ({ onAddMemory }) => {
                   key={index}
                   onClick={async () => {
                     const selected = suggestion.description;
-                    setValue(selected, false); // Don't trigger new fetch
-                    clearSuggestions(); // Hide dropdown
-                    setSelectedPlace(null); // Optional: reset before setting new one
-                  
+                    setValue(selected, false);
+                    clearSuggestions();
                     try {
                       const results = await getGeocode({ address: selected });
                       const { lat, lng } = await getLatLng(results[0]);
@@ -200,7 +212,6 @@ const MemoryForm = ({ onAddMemory }) => {
                       console.error("❌ Location select error:", err);
                     }
                   }}
-                  
                   className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                 >
                   {suggestion.description}
@@ -210,13 +221,50 @@ const MemoryForm = ({ onAddMemory }) => {
           )}
         </div>
 
-        <input
-          type="text"
-          placeholder="Tag friends (comma-separated)"
-          className="p-3 border border-gray-300 rounded-md text-sm"
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-        />
+        {/* Paired With Users */}
+<div className="relative">
+  <input
+    type="text"
+    placeholder="Tag friends by name/email"
+    value={searchUserInput}
+    onChange={(e) => setSearchUserInput(e.target.value)}
+    className="w-full p-3 border border-gray-300 rounded-md text-sm"
+  />
+
+  {Array.isArray(userResults) && userResults.length > 0 && (
+    <ul className="absolute z-10 bg-white border border-gray-200 rounded-md mt-1 w-full shadow-md max-h-48 overflow-y-auto">
+      {userResults.map((user) => (
+        <li
+          key={user.email}
+          onClick={() => {
+            if (!pairedWith.includes(user.email)) {
+              setPairedWith((prev) => [...prev, user.email]);
+            }
+            setSearchUserInput("");
+            setUserResults([]);
+          }}
+          className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+        >
+          {user.name} ({user.email})
+        </li>
+      ))}
+    </ul>
+  )}
+
+  {pairedWith.length > 0 && (
+    <div className="mt-2 text-sm text-gray-600 flex flex-wrap gap-2">
+      {pairedWith.map((email) => (
+        <span
+          key={email}
+          className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full"
+        >
+          {email}
+        </span>
+      ))}
+    </div>
+  )}
+</div>
+
 
         <textarea
           rows={3}

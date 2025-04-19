@@ -1,16 +1,18 @@
 const express = require("express");
 const router = express.Router();
-const { generateStory, recommendSpotifyTrack, addMemory, getAllMemories } = require("../../controllers/memory/memoryController");
+const authMiddleware = require("../../middleware/authMiddleware");
+const {
+  generateStory,
+  addMemory,
+  getUserMemories,
+  recommendSpotifyTrack,
+  getPairedMemories
+} = require("../../controllers/memory/memoryController");
 
-router.post("/generate", generateStory);
-
-// @route POST /api/memories
-router.post("/", addMemory);
-
-// @route GET /api/memories
-router.get("/", getAllMemories);
-
-// @route POST /api/memories/music
-router.post("/music", recommendSpotifyTrack);
+router.post("/generate", authMiddleware, generateStory);
+router.post("/", authMiddleware, addMemory);
+router.get("/", authMiddleware, getUserMemories);
+router.post("/music", authMiddleware, recommendSpotifyTrack);
+router.get("/paired", authMiddleware, getPairedMemories);
 
 module.exports = router;

@@ -1,22 +1,12 @@
-const { db, storage } = require("../../../server");
-const axios = require("axios");
+const { db } = require("../../../server");
 const { v4: uuidv4 } = require("uuid");
 const { OpenAI } = require("openai");
 const Clarifai = require("clarifai");
-const { spawn } = require("child_process");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const crypto = require("crypto");
 const getSpotifyToken = require("../../utils/spotifyAuth");
+const axios = require("axios");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const clarifai = new Clarifai.App({
-  apiKey: process.env.CLARIFAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const clarifai = new Clarifai.App({ apiKey: process.env.CLARIFAI_API_KEY });
 
 const detectFoodType = async (base64Image) => {
   try {
@@ -24,19 +14,14 @@ const detectFoodType = async (base64Image) => {
       Clarifai.FOOD_MODEL,
       { base64: base64Image.replace(/^data:image\/\w+;base64,/, "") }
     );
-
-    const concepts = res.outputs[0].data.concepts;
-    if (!concepts || concepts.length === 0) return "unknown";
-
-    const topPrediction = concepts[0];
-    return topPrediction.value > 0.85 ? topPrediction.name : "unknown";
-  } catch (error) {
-    console.error("❌ Clarifai failed:", error);
+    const top = res.outputs?.[0]?.data?.concepts?.[0];
+    return top?.value > 0.85 ? top.name : "unknown";
+  } catch (err) {
+    console.error("Clarifai error", err);
     return "unknown";
   }
 };
 
-// Generate poetic story from user prompt choices
 const generateStory = async (req, res) => {
   try {
     const {
@@ -44,19 +29,15 @@ const generateStory = async (req, res) => {
       time, city, country, userNote, meaning
     } = req.body;
 
-    if (!image || !mood || !occasion || !vibe || !location || !time || !city || !country) {
+    if (!image || !mood || !occasion || !vibe || !location || !time || !city || !country)
       return res.status(400).json({ message: "Missing fields" });
-    }
 
     const foodType = await detectFoodType(image);
-    console.log("🍜 Detected food:", foodType);
-
-    // Inject real-world tone guidance + examples
     const prompt = `
 You're not an author — you're just someone reflecting on a meaningful food moment.
 
 Write 1–2 short, casual sentences about a real memory involving ${foodType}.
-Use a natural tone — not poetic, not dramatic. Don't over-explain. Just sound human.
+Use a natural tone — not poetic, not dramatic. Don't over-explain.
 
 Details:
 - Mood: ${mood}
@@ -69,68 +50,121 @@ Details:
 ${userNote ? `- Note from user: "${userNote}"` : ""}
 ${meaning ? `- Memory Importance: ${meaning}/5` : ""}
 
-Here are examples of the tone to follow:
+Examples:
 
-Example 1:
 “We baked a cake together that morning — not perfect, but it tasted like us.”
-
-Example 2:
-“Sushi on the curb after class. She laughed at how I couldn’t use chopsticks.”
-
-Now write the user's memory.
-`;
+“Sushi on the curb after class. She laughed at how I couldn’t use chopsticks.”`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [{ role: "user", content: prompt }],
       max_tokens: 100,
-      temperature: 0.75, // grounded, slightly expressive
+      temperature: 0.75,
     });
 
     const story = response.choices?.[0]?.message?.content?.trim();
     res.status(200).json({ story });
-  } catch (error) {
-    console.error("❌ GPT generation failed:", error);
-    res.status(500).json({ message: "Failed to generate story." });
+  } catch (err) {
+    console.error("GPT error:", err);
+    res.status(500).json({ message: "Story generation failed" });
   }
 };
 
+const addMemory = async (req, res) => {
+  try {
+    const user = req.user;
+    const {
+      image, journal, pairedWith = [], userNote, meaning, location, mood, vibe
+    } = req.body;
 
-const moodToGenre = {
-  nostalgic: "acoustic",
-  excited: "pop",
-  peaceful: "chill",
-  cozy: "lofi",
-  sad: "piano",
+    if (!user?.uid || !image || !journal)
+      return res.status(400).json({ message: "Missing fields" });
+
+    const tags = [];
+
+    // Convert emails to userId + name + email
+    for (const email of pairedWith) {
+      const snap = await db.collection("users").where("email", "==", email).limit(1).get();
+      if (!snap.empty) {
+        const data = snap.docs[0].data();
+        tags.push({
+          userId: data.uid,
+          email,
+          name: data.name || email.split("@")[0],
+          userNote,
+          vibe,
+        });
+      }
+    }
+
+    const memory = {
+      id: uuidv4(),
+      userId: user.uid,
+      email: user.email,
+      image,
+      journal,
+      tags,  // ✅ now used instead of "pairedWith"
+      userNote: userNote?.trim() || "",
+      meaning: meaning || null,
+      mood,
+      vibe,
+      location,
+      createdAt: new Date(),
+    };
+
+    await db.collection("memories").doc(memory.id).set(memory);
+    res.status(201).json({ message: "Memory saved", memory });
+  } catch (err) {
+    console.error("❌ Add memory error:", err);
+    res.status(500).json({ message: "Failed to save memory" });
+  }
 };
 
-const vibeToTags = {
-  spicy: "latin",
-  warm: "soul",
-  comforting: "jazz",
-  simple: "ambient",
+const getUserMemories = async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Firestore throws index error *only if* the collection has no docs with userId
+    // So we first check if *any* memories exist for this user
+    const checkSnap = await db
+      .collection("memories")
+      .where("userId", "==", user.uid)
+      .limit(1)
+      .get();
+
+    // ✅ No memories — return empty array early
+    if (checkSnap.empty) {
+      return res.status(200).json({ memories: [] });
+    }
+
+    // ✅ Memories exist — now safely order by createdAt
+    const snapshot = await db
+      .collection("memories")
+      .where("userId", "==", user.uid)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const memories = snapshot.docs.map(doc => doc.data());
+    return res.status(200).json({ memories });
+
+  } catch (err) {
+    console.error("❌ Fetch memories error:", err);
+    return res.status(500).json({ message: "Failed to fetch memories" });
+  }
 };
 
 const recommendSpotifyTrack = async (req, res) => {
   try {
     const { mood, vibe, memoryId } = req.body;
-
     if (!mood || !vibe || !memoryId)
       return res.status(400).json({ message: "Missing mood/vibe/memoryId" });
 
     const token = await getSpotifyToken();
+    const query = `${mood} ${vibe}`;
 
-    const genre = moodToGenre[mood] || "lofi";
-    const tag = vibeToTags[vibe] || "instrumental";
-
-    const query = `${genre} ${tag}`;
     const result = await axios.get(
       `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
 
     const track = result.data.tracks.items[0];
@@ -141,65 +175,44 @@ const recommendSpotifyTrack = async (req, res) => {
     const title = track.name;
     const artist = track.artists.map(a => a.name).join(", ");
 
-    // ✅ Save it to Firestore
     await db.collection("memories").doc(memoryId).update({
       musicUrl,
-      musicMeta: {
-        title,
-        artist,
-        embedUrl,
-      },
+      musicMeta: { title, artist, embedUrl },
     });
 
     res.status(200).json({ musicUrl, embedUrl, title, artist });
   } catch (err) {
-    console.error("❌ Spotify fetch failed:", err);
-    res.status(500).json({ message: "Failed to get Spotify music." });
+    console.error("Spotify fetch error:", err);
+    res.status(500).json({ message: "Failed to get music" });
   }
 };
 
-
-// POST /api/memories
-const addMemory = async (req, res) => {
+const getPairedMemories = async (req, res) => {
   try {
-    const { image, journal, tags, userNote, meaning, location, mood, vibe } = req.body;
+    const user = req.user;
+    console.log("👤 Fetching paired memories for:", user.uid);
 
-    if (!image || !journal) {
-      return res.status(400).json({ message: "Missing required fields." });
-    }
+    const snapshot = await db.collection("memories").get();
+    const allMemories = snapshot.docs.map(doc => doc.data());
 
-    const ref = db.collection("memories").doc();
-    const memory = {
-      id: ref.id,
-      image,
-      journal,
-      tags: Array.isArray(tags) ? tags : [],
-      userNote: userNote?.trim() || "",
-      meaning: meaning || null,
-      mood: mood || "",
-      vibe: vibe || "",
-      location: location || null,
-      createdAt: new Date(),
-    };
+    const featured = allMemories.filter((mem) =>
+      Array.isArray(mem.tags) &&
+      mem.tags.some((tag) => tag.userId === user.uid) &&
+      mem.userId !== user.uid
+    );
 
-    await ref.set(memory);
-    res.status(201).json({ message: "Memory saved", memory });
+    console.log("🎁 Featured Memories Found:", featured.length);
+    res.status(200).json({ memories: featured });
   } catch (err) {
-    console.error("❌ Error saving memory:", err);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("❌ Paired memories fetch error:", err);
+    res.status(500).json({ message: "Failed to fetch paired memories" });
   }
 };
 
-// GET /api/memories
-const getAllMemories = async (req, res) => {
-  try {
-    const snapshot = await db.collection("memories").orderBy("createdAt", "desc").get();
-    const memories = snapshot.docs.map(doc => doc.data());
-    res.status(200).json({ memories });
-  } catch (err) {
-    console.error("Error fetching memories:", err);
-    res.status(500).json({ message: "Internal server error" });
-  }
+module.exports = {
+  generateStory,
+  addMemory,
+  getUserMemories,
+  recommendSpotifyTrack,
+  getPairedMemories
 };
-
-module.exports = { generateStory, recommendSpotifyTrack, addMemory, getAllMemories };

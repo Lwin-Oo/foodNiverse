@@ -12,8 +12,14 @@ const getAuraClass = (mood, vibe) => {
   return "bg-gradient-to-b from-[#e0f7ff] via-white to-[#f0eaff]";
 };
 
-const MemoryCard = ({ memory }) => {
+const MemoryCard = ({ memory, currentUser }) => {
   const auraClass = getAuraClass(memory.mood, memory.vibe);
+  const isOwner = memory.userId === currentUser?.uid;
+  const isFeatured = Array.isArray(memory.tags)
+    ? memory.tags.some(tag => tag.userId === currentUser?.uid)
+    : false;
+
+  const creatorName = memory.name || memory.email?.split("@")[0] || "Someone";
 
   return (
     <div
@@ -24,8 +30,12 @@ const MemoryCard = ({ memory }) => {
         transition-transform duration-300 hover:-translate-y-1 hover:ring-2
       `}
     >
-      {/* Background Glow */}
-      <div className="absolute inset-0 blur-2xl bg-blue-200 opacity-10 pointer-events-none" />
+      {/* Romantic Featured Tag */}
+      {!isOwner && isFeatured && (
+        <div className="absolute top-3 left-3 bg-pink-100 text-pink-700 text-[10px] font-semibold px-3 py-1 rounded-full shadow-sm z-20">
+          💌 {creatorName} made this memory with you
+        </div>
+      )}
 
       <div className="relative flex flex-col items-center space-y-3 z-10">
         {/* Image */}
@@ -48,13 +58,12 @@ const MemoryCard = ({ memory }) => {
           </div>
         )}
 
-        {/* Story */}
+        {/* Journal */}
         <div className="text-center px-2">
           <p className="text-[0.9rem] text-gray-800 leading-relaxed font-serif italic">
             “{memory.journal}”
           </p>
 
-          {/* Location */}
           {memory.location?.description && (
             <p className="mt-1 text-[11px] text-blue-600 font-semibold tracking-wide">
               {memory.location.description}
@@ -62,15 +71,13 @@ const MemoryCard = ({ memory }) => {
           )}
         </div>
 
-        {/* Tags */}
-        {memory.tags.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-2 text-xs text-blue-700 font-medium">
-            {memory.tags.map((tag, i) => (
-              <span key={i} className="bg-blue-100 px-2 py-1 rounded-full shadow">
-                {tag}
-              </span>
-            ))}
-          </div>
+        {/* Tag Info */}
+        {Array.isArray(memory.tags) && memory.tags.length > 0 && (
+          <p className="mt-2 text-[11px] font-semibold text-center text-pink-600">
+            {isOwner
+              ? `✨ Shared with ${memory.tags.map(t => t.name || t.email).join(", ")}`
+              : ""}
+          </p>
         )}
       </div>
     </div>

@@ -28,6 +28,12 @@ app.use(morgan("dev"));
 const memoryRoutes = require("./src/routes/memory/memoryRoutes");
 app.use("/api/memories", memoryRoutes);
 
+const authRoutes = require("./src/routes/auth/authRoutes");
+app.use("/api/auth", authRoutes);
+
+const userRoutes = require("./src/routes/user/userRoutes");
+app.use("/api/user", userRoutes);
+
 // ✅ Health check
 app.get("/", (req, res) => {
   res.send("🔥 Local Memory API running.");
