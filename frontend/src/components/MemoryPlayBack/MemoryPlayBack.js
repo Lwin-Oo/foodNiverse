@@ -4,6 +4,7 @@ import API from "../../utils/api";
 
 const MemoryPlayback = ({ memory, onClose }) => {
   const [embedUrl, setEmbedUrl] = useState(null);
+  const creatorUsername = memory.creatorUsername || memory.name || memory.email?.split("@")[0] || "someone";
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -89,7 +90,7 @@ const MemoryPlayback = ({ memory, onClose }) => {
         {/* Creator Info */}
         <div
           className="mt-8 flex items-center gap-3 cursor-pointer"
-          onClick={() => navigate(`/profile/${creatorName}`)}
+          onClick={() => navigate(`/profile/${creatorUsername}`)}
         >
           <img
             src={`https://api.dicebear.com/7.x/thumbs/svg?seed=${creatorName}`}

@@ -7,7 +7,8 @@ const {
   getUserMemories,
   recommendSpotifyTrack,
   getPairedMemories,
-  getPublicMemories
+  getPublicMemories,
+  getPartnerMemories
 } = require("../../controllers/memory/memoryController");
 
 router.post("/generate", authMiddleware, generateStory);
@@ -16,5 +17,6 @@ router.get("/", authMiddleware, getUserMemories);
 router.post("/music", authMiddleware, recommendSpotifyTrack);
 router.get("/paired", authMiddleware, getPairedMemories);
 router.get("/public", getPublicMemories);
+router.post("/partner", authMiddleware, getPartnerMemories);
 
 module.exports = router;

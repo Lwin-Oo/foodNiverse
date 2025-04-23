@@ -237,11 +237,53 @@ const getPublicMemories = async (req, res) => {
   }
 };
 
+const getPartnerMemories = async (req, res) => {
+  try {
+    const { partnerName } = req.body;
+    const currentUser = req.user;
+
+    if (!partnerName || !currentUser?.uid) {
+      return res.status(400).json({ message: "Missing partner name or auth" });
+    }
+
+    // 🧠 Get partner user
+    const partnerSnap = await db.collection("users").where("name", "==", partnerName).limit(1).get();
+    if (partnerSnap.empty) return res.status(404).json({ message: "Partner not found" });
+
+    const partner = partnerSnap.docs[0].data();
+
+    // 🔍 Check for thread access
+    const threadsSnap = await db.collection("threads")
+      .where("participants", "array-contains", currentUser.uid)
+      .get();
+
+    const hasThread = threadsSnap.docs.some(doc => {
+      const { participants } = doc.data();
+      return participants.includes(partner.uid);
+    });
+
+    if (!hasThread) return res.status(403).json({ message: "No thread access" });
+
+    // ✅ Fetch memories of the partner
+    const memSnap = await db.collection("memories")
+      .where("userId", "==", partner.uid)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const memories = memSnap.docs.map(doc => doc.data());
+    res.status(200).json({ memories });
+  } catch (err) {
+    console.error("❌ getPartnerMemories error:", err);
+    res.status(500).json({ message: "Failed to fetch partner's memories" });
+  }
+};
+
 module.exports = {
   generateStory,
   addMemory,
   getUserMemories,
   recommendSpotifyTrack,
   getPairedMemories,
-  getPublicMemories
+  getPublicMemories,
+  getPartnerMemories
 };

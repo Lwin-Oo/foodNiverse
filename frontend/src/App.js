@@ -64,7 +64,7 @@ function App() {
         {token && username && (
           <>
             <Route
-              path={`/${username}/feed`}
+              path="/:username/feed"
               element={
                 <div className="flex min-h-screen">
                   <Sidebar />
@@ -74,6 +74,7 @@ function App() {
                 </div>
               }
             />
+
             <Route
               path={`/${username}/create`}
               element={
