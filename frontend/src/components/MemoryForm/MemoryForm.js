@@ -8,7 +8,7 @@ const vibes = ["warm", "spicy", "simple", "comforting"];
 const locations = ["home", "restaurant", "street food", "friend's place"];
 const times = ["morning", "lunch", "evening", "midnight"];
 
-const MemoryForm = ({ onAddMemory, onThreadSuggestion }) => {
+const MemoryForm = ({ onAddMemory, onThreadSuggestion, replyingTo = null, isInline = false }) => {
   const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
 
@@ -25,6 +25,7 @@ const MemoryForm = ({ onAddMemory, onThreadSuggestion }) => {
   const [searchUserInput, setSearchUserInput] = useState("");
   const [userResults, setUserResults] = useState([]);
   const [pairedWith, setPairedWith] = useState([]);
+  const [seekingConnection, setSeekingConnection] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -105,6 +106,8 @@ const MemoryForm = ({ onAddMemory, onThreadSuggestion }) => {
           mood,
           vibe,
           location: selectedPlace || null,
+          seekingConnection,
+          respondingTo: replyingTo,
         });
   
         const savedMemory = res.data.memory;
@@ -336,6 +339,19 @@ const MemoryForm = ({ onAddMemory, onThreadSuggestion }) => {
         )}
 
         {errorMsg && <p className="text-sm text-red-500 text-center">{errorMsg}</p>}
+
+        <div className="flex items-center justify-center gap-2">
+  <input
+    type="checkbox"
+    id="seekingConnection"
+    checked={seekingConnection}
+    onChange={(e) => setSeekingConnection(e.target.checked)}
+    className="h-4 w-4 text-blue-600 rounded"
+  />
+  <label htmlFor="seekingConnection" className="text-sm text-gray-700">
+    I'm open to meeting someone through this memory 💫
+  </label>
+</div>
 
         <button
           type="button"

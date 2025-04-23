@@ -24,6 +24,7 @@ const Sidebar = () => {
       {navItem(`/${username}/feed`, "Home", "🏠")}
       {navItem(`/${username}/create`, "Create Memory", "➕")}
       {navItem(`/${username}/chat`, "Chat", "💬")}
+      {navItem(`/${username}/sparks`, "Sparks", "✨")}
     </div>
   );
 };

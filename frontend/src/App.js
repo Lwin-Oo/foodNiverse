@@ -4,6 +4,7 @@ import Sidebar from "./components/SideBar/SideBar";
 import HomeFeed from "./pages/HomeFeed/HomeFeed";
 import CreateMemory from "./pages/CreateMemory/CreateMemory";
 import Chat from "./pages/Chat/Chat";
+import MemorySparks from "./pages/MemorySparks/MemorySparks";
 import AuthPage from "./pages/Auth/AuthPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
 import AIAgentBubble from "./components/AIAgentBubble/AIAgentBubble";
@@ -96,6 +97,10 @@ function App() {
                   </div>
                 </div>
               }
+            />
+            <Route
+              path={`/${username}/sparks`}
+              element={renderWithLayout(MemorySparks)}
             />
           </>
         )}

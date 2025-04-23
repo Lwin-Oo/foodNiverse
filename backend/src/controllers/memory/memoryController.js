@@ -74,15 +74,23 @@ const addMemory = async (req, res) => {
   try {
     const user = req.user;
     const {
-      image, journal, pairedWith = [], userNote, meaning, location, mood, vibe
+      image,
+      journal,
+      pairedWith = [],
+      userNote,
+      meaning,
+      location,
+      mood,
+      vibe,
+      seekingConnection,
+      respondingTo,
     } = req.body;
 
-    if (!user?.uid || !image || !journal)
+    if (!user?.uid || typeof journal !== "string")
       return res.status(400).json({ message: "Missing fields" });
 
     const tags = [];
 
-    // Convert emails to userId + name + email
     for (const email of pairedWith) {
       const snap = await db.collection("users").where("email", "==", email).limit(1).get();
       if (!snap.empty) {
@@ -101,15 +109,17 @@ const addMemory = async (req, res) => {
       id: uuidv4(),
       userId: user.uid,
       email: user.email,
-      image,
+      image: image || "", // allow empty string if no image
       journal,
-      tags,  // ✅ now used instead of "pairedWith"
+      tags, // = pairedWith (intact)
       userNote: userNote?.trim() || "",
       meaning: meaning || null,
-      mood,
-      vibe,
-      location,
+      mood: mood || null,
+      vibe: vibe || null,
+      location: location || null,
       createdAt: new Date(),
+      seekingConnection: seekingConnection || false,
+      respondingTo: respondingTo || null, // ✅ this allows replying to another memory
     };
 
     await db.collection("memories").doc(memory.id).set(memory);
@@ -278,6 +288,86 @@ const getPartnerMemories = async (req, res) => {
   }
 };
 
+const getMemorySparks = async (req, res) => {
+  try {
+    const snapshot = await db
+      .collection("memories")
+      .where("seekingConnection", "==", true)
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .get();
+
+    const sparks = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        ...data,
+        creatorName: data.name || data.email?.split("@")[0] || "user",
+      };
+    });
+
+    res.status(200).json({ sparks });
+  } catch (err) {
+    console.error("❌ Memory Sparks fetch error:", err);
+    res.status(500).json({ message: "Failed to fetch memory sparks" });
+  }
+};
+
+const getMemoryReplies = async (req, res) => {
+  try {
+    const { sparkId } = req.params;
+    if (!sparkId) return res.status(400).json({ message: "Missing sparkId" });
+
+    const snapshot = await db
+      .collection("memories")
+      .where("respondingTo", "==", sparkId)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const replies = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+        const userSnap = await db
+          .collection("users")
+          .where("uid", "==", data.userId)
+          .limit(1)
+          .get();
+
+        const user = userSnap.empty ? null : userSnap.docs[0].data();
+        return {
+          ...data,
+          name: user?.name || "someone",
+        };
+      })
+    );
+
+    res.status(200).json({ replies });
+  } catch (err) {
+    console.error("❌ Fetch replies error:", err);
+    res.status(500).json({ message: "Failed to fetch replies" });
+  }
+};
+
+
+const getReplyCounts = async (req, res) => {
+  try {
+    const snapshot = await db.collection("memories").where("respondingTo", "!=", null).get();
+    const counts = {};
+
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      const sparkId = data.respondingTo;
+      if (sparkId) {
+        counts[sparkId] = (counts[sparkId] || 0) + 1;
+      }
+    });
+
+    res.status(200).json({ counts });
+  } catch (err) {
+    console.error("❌ Failed to fetch reply counts:", err);
+    res.status(500).json({ message: "Failed to fetch reply counts" });
+  }
+};
+
 module.exports = {
   generateStory,
   addMemory,
@@ -285,5 +375,8 @@ module.exports = {
   recommendSpotifyTrack,
   getPairedMemories,
   getPublicMemories,
-  getPartnerMemories
+  getPartnerMemories,
+  getMemorySparks,
+  getMemoryReplies,
+  getReplyCounts
 };

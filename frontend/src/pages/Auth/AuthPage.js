@@ -29,10 +29,12 @@ const AuthPage = () => {
       try {
         const res = await API.post("/auth/check", { email });
         setIsExistingUser(res.data.exists);
+        setUserData((prev) => ({ ...prev, name: res.data.name }));
         setAiPrompt(res.data.exists
-          ? `Welcome back 👋 Just enter your password to continue`
+          ? `Welcome back, ${res.data.name}! 👋 Just enter your password to continue`
           : prompts[0]
         );
+
         setStep(1);
       } catch (err) {
         console.error(err);
@@ -78,7 +80,12 @@ const AuthPage = () => {
       const nextStep = step + 1;
 
       if (nextStep <= keys.length) {
-        setAiPrompt(prompts[step]);
+        const isNameStep = key === "name";
+        setAiPrompt(
+          isNameStep
+            ? `Nice to meet you, ${inputValue.trim()}! ${prompts[step]}`
+            : prompts[step]
+          );
         setStep(nextStep);
         setInputValue("");
       } else {

@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../../utils/api";
 
 const getAuraClass = (mood, vibe) => {
   if (mood === "nostalgic") return "bg-gradient-to-r from-[#cbd5e1] via-white to-[#e0e7ff]";
@@ -13,34 +14,74 @@ const getAuraClass = (mood, vibe) => {
   return "bg-gradient-to-b from-[#e0f7ff] via-white to-[#f0eaff]";
 };
 
-const MemoryCard = ({ memory, currentUser }) => {
+const MemoryCard = ({
+  memory,
+  currentUser,
+  replyCountMap = {},
+  sparkOwnerMap = {},
+}) => {
   const navigate = useNavigate();
   const auraClass = getAuraClass(memory.mood, memory.vibe);
-  const isOwner = memory.userId === currentUser?.uid;
-  const isFeatured = Array.isArray(memory.tags)
-    ? memory.tags.some(tag => tag.userId === currentUser?.uid)
-    : false;
+  const [showReplies, setShowReplies] = useState(false);
+  const [replies, setReplies] = useState([]);
 
+  const isOwner = memory.userId === currentUser?.uid;
+  const isReply = !!memory.respondingTo;
+  const repliesCount = replyCountMap[memory.id] || 0;
+  const connectedTo = sparkOwnerMap[memory.respondingTo];
   const creatorName = memory.name || memory.email?.split("@")[0] || "someone";
+
+  const youAreTagged =
+    Array.isArray(memory.tags) &&
+    memory.tags.some((tag) => tag.userId === currentUser?.uid) &&
+    !isOwner;
+
+  const handleToggleReplies = async () => {
+    if (showReplies) return setShowReplies(false);
+    try {
+      const res = await API.get(`/memories/replies/${memory.id}`);
+      setReplies(res.data.replies || []);
+      setShowReplies(true);
+    } catch (err) {
+      console.error("❌ Failed to load replies:", err);
+    }
+  };
 
   return (
     <div
       className={`
         relative ${auraClass}
-        p-4 rounded-[2rem] shadow-xl w-full max-w-[14rem] mx-auto border border-blue-100 ring-1 ring-blue-200
-        backdrop-blur-md overflow-hidden
-        transition-transform duration-300 hover:-translate-y-1 hover:ring-2
-        min-h-[27rem] max-h-[27rem] flex flex-col justify-between
+        group
+        p-4 rounded-[2rem] max-w-[14rem] mx-auto
+        border border-transparent hover:border-blue-200
+        transition-all duration-200 ease-out
+        hover:scale-[1.01]
+        backdrop-blur-[2px]
+        min-h-[27rem] max-h-fit
+        flex flex-col justify-between
       `}
     >
-      {!isOwner && isFeatured && (
-        <div className="absolute top-3 left-3 bg-pink-100 text-pink-700 text-[10px] font-semibold px-3 py-1 rounded-full shadow-sm z-20">
-          💌 {creatorName} made this memory with you
+      {/* ✨ Top-left Labels */}
+      <div className="absolute top-3 left-3 flex flex-col space-y-1 z-20">
+        {isReply && connectedTo && (
+          <div className="bg-emerald-100 text-emerald-700 text-[10px] font-semibold px-3 py-1 rounded-full shadow-sm">
+            ✨ Connected with {connectedTo}
+          </div>
+        )}
+      </div>
+
+      {/* 🌟 Top-right Tag Alert if user was tagged */}
+      {youAreTagged && (
+        <div className="absolute top-3 right-3 z-20">
+          <span className="bg-pink-100 text-pink-700 text-[10px] font-semibold px-3 py-1 rounded-full shadow-sm animate-pulse">
+            🌟 You were part of this moment!
+          </span>
         </div>
       )}
 
+      {/* 🖼️ Image */}
       <div className="flex flex-col items-center space-y-3 z-10">
-        <div className="overflow-hidden rounded-2xl h-40 w-full border-4 border-white shadow-md">
+        <div className="overflow-hidden rounded-2xl h-40 w-full border-4 border-white">
           <img
             src={memory.image}
             alt="memory"
@@ -58,32 +99,54 @@ const MemoryCard = ({ memory, currentUser }) => {
           </div>
         )}
 
-        {/* Journal */}
         <div className="text-center px-2">
           <p className="text-[0.9rem] text-gray-800 leading-relaxed font-serif italic line-clamp-3 max-h-[4.5rem] overflow-hidden">
             “{memory.journal}”
           </p>
-
           {memory.location?.description && (
             <p className="mt-1 text-[11px] text-blue-600 font-semibold tracking-wide">
               {memory.location.description}
             </p>
           )}
         </div>
-
-        {/* Tags */}
-        {Array.isArray(memory.tags) && memory.tags.length > 0 && (
-          <p className="mt-2 text-[11px] font-semibold text-center text-pink-600">
-            {isOwner
-              ? `✨ Shared with ${memory.tags.map(t => t.name || t.email).join(", ")}`
-              : ""}
-          </p>
-        )}
       </div>
 
-      {/* Creator info with nav */}
+      {/* 🧵 Replies Viewer */}
+      {/* {!isReply && isOwner && repliesCount > 0 && (
+        <button
+          onClick={handleToggleReplies}
+          className="mt-3 text-[11px] text-indigo-600 font-semibold hover:underline"
+        >
+          💬 View {repliesCount} response{repliesCount > 1 ? "s" : ""}
+        </button>
+      )} */}
+
+      {showReplies && replies.length > 0 && (
+        <div className="mt-4 space-y-3">
+          {replies.map((r) => (
+            <div
+              key={r.id}
+              className="bg-white/80 border border-gray-200 rounded-xl p-3 text-xs text-gray-700 italic"
+            >
+              {r.image && (
+                <img
+                  src={r.image}
+                  alt="reply"
+                  className="w-full h-32 object-cover rounded-md mb-2"
+                />
+              )}
+              “{r.journal}”
+              <p className="text-[10px] text-gray-400 mt-1">
+                — {r.name || r.email?.split("@")[0] || "someone"}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 👤 Creator */}
       <div
-        className="flex items-center gap-2 mt-4 justify-center cursor-pointer"
+        className="flex items-center gap-2 mt-4 justify-center cursor-pointer transition-opacity duration-200 hover:opacity-80"
         onClick={() => navigate(`/profile/${creatorName}`)}
       >
         <img

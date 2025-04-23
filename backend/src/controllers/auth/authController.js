@@ -11,7 +11,12 @@ const checkUserExists = async (req, res) => {
     const userSnap = await db.collection("users").where("email", "==", email).get();
     const exists = !userSnap.empty;
 
-    res.status(200).json({ exists });
+    let name = null;
+    if (exists) {
+      name = userSnap.docs[0].data().name;
+    }
+    res.status(200).json({ exists, name });
+
   } catch (err) {
     console.error("❌ Error checking user existence:", err);
     res.status(500).json({ message: "Internal server error" });
@@ -21,7 +26,7 @@ const checkUserExists = async (req, res) => {
 // @desc Register user
 const registerUser = async (req, res) => {
   try {
-    const { email, password, name, avatar } = req.body;
+    const { email, password, name, avatar, city, country } = req.body;
     if (!email || !password || !name) return res.status(400).json({ message: "Missing fields" });
 
     const userSnap = await db.collection("users").where("email", "==", email).get();
@@ -36,6 +41,8 @@ const registerUser = async (req, res) => {
       password: hashedPassword,
       name,
       avatar: avatar || null,
+      city: city || "",
+      country: country || "",
       createdAt: new Date(),
     };
 

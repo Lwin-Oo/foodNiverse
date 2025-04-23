@@ -1,11 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import API from "../../utils/api";
 import GlobalHeader from "../../components/GlobalHeader/GlobalHeader";
 import MemoryForm from "../../components/MemoryForm/MemoryForm";
 import AIAgentBubble from "../../components/AIAgentBubble/AIAgentBubble";
 
 const CreateMemory = () => {
+  const [searchParams] = useSearchParams();
   const [memories, setMemories] = useState([]);
+  const [sparkMemory, setSparkMemory] = useState(null);
   const [aiSuggestion, setAISuggestion] = useState(null); // ← GPT response
   const [showAI, setShowAI] = useState(false);
 
@@ -31,7 +34,7 @@ const CreateMemory = () => {
     <>
       <GlobalHeader />
       <div className="max-w-2xl mx-auto">
-        <h2 className="text-2xl font-semibold mb-4">📷 Create a New Memory</h2>
+      <h2 className="text-2xl font-semibold mb-4">Create a New Memory</h2>
         <MemoryForm onAddMemory={handleAddMemory} onThreadSuggestion={handleThreadSuggestion} />
       </div>
 
