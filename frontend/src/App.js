@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Sidebar from "./components/SideBar/SideBar";
 import HomeFeed from "./pages/HomeFeed/HomeFeed";
@@ -6,12 +6,30 @@ import CreateMemory from "./pages/CreateMemory/CreateMemory";
 import Chat from "./pages/Chat/Chat";
 import AuthPage from "./pages/Auth/AuthPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
+import AIAgentBubble from "./components/AIAgentBubble/AIAgentBubble";
 
 function App() {
   const token = localStorage.getItem("token");
   const user = JSON.parse(localStorage.getItem("user"));
   const username = user?.name;
 
+  const [showLunr, setShowLunr] = useState(false);
+  const [triggeredProps, setTriggeredProps] = useState(null); // store AI trigger info
+
+  // Used after memory submission when AI detects thread
+  const triggerAI = (partnerName, aiMessage, onConfirm) => {
+    setTriggeredProps({ partnerName, aiMessage, onConfirm });
+    setShowLunr(true);
+  };
+
+  const renderWithLayout = (Component) => (
+    <div className="flex min-h-screen">
+      <Sidebar />
+      <div className="flex-1 p-4 relative">
+        <Component triggerAI={triggerAI} />
+      </div>
+    </div>
+  );
 
   return (
     <Router>
@@ -84,6 +102,19 @@ function App() {
         {/* ✅ Catch-all redirect */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
+      {/* ✅ Persistent AI Agent Bubble (Manual or Triggered) */}
+      {token && (
+        <AIAgentBubble
+          mode={triggeredProps ? "triggered" : "manual"}
+          partnerName={triggeredProps?.partnerName}
+          aiMessage={triggeredProps?.aiMessage}
+          onConfirm={triggeredProps?.onConfirm || (() => {})}
+          onClose={() => {
+            setShowLunr(false);
+            setTriggeredProps(null);
+          }}
+        />
+      )}
     </Router>
   );
 }

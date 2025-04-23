@@ -8,7 +8,7 @@ const vibes = ["warm", "spicy", "simple", "comforting"];
 const locations = ["home", "restaurant", "street food", "friend's place"];
 const times = ["morning", "lunch", "evening", "midnight"];
 
-const MemoryForm = ({ onAddMemory }) => {
+const MemoryForm = ({ onAddMemory, onThreadSuggestion }) => {
   const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(null);
 
@@ -92,7 +92,7 @@ const MemoryForm = ({ onAddMemory }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!imageFile || !story) return;
-
+  
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
@@ -106,8 +106,42 @@ const MemoryForm = ({ onAddMemory }) => {
           vibe,
           location: selectedPlace || null,
         });
-        onAddMemory(res.data.memory);
+  
+        const savedMemory = res.data.memory;
+        onAddMemory(savedMemory);
         resetForm();
+  
+        const currentUser = JSON.parse(localStorage.getItem("user"));
+        if (pairedWith.length === 1) {
+          const aiRes = await API.post("/ai/threads/check", {
+            userId: currentUser.uid,
+            email: currentUser.email,
+            partnerEmail: pairedWith[0],
+          });
+  
+          if (aiRes.data.hasThread) {
+            const gptRes = await API.post("/ai/threads/agent", {
+              user: {
+                name: currentUser.name,
+                uid: currentUser.uid,
+              },
+              partner: aiRes.data.partner,
+              memory: {
+                journal: story,
+                mood,
+                vibe,
+                meaning,
+                userNote,
+              },
+            });
+  
+            // 👇 Show AI agent bubble in parent (CreateMemory.js)
+            onThreadSuggestion({
+              partner: aiRes.data.partner,
+              message: gptRes.data.message,
+            });
+          }
+        }
       } catch (err) {
         console.error("❌ Save error:", err);
         setErrorMsg("Could not save memory.");
@@ -115,6 +149,8 @@ const MemoryForm = ({ onAddMemory }) => {
     };
     reader.readAsDataURL(imageFile);
   };
+  
+  
 
   const resetForm = () => {
     setImageFile(null);

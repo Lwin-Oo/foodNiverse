@@ -33,7 +33,7 @@ const ProfilePage = () => {
   return (
     <>
         <GlobalHeader/>
-        <div className="min-h-screen bg-gradient-to-br from-[#fef6e4] via-[#fff1f1] to-[#e4f0fb] py-12 px-4">
+        <div className="min-h-screen py-12 px-4">
       <div className="max-w-4xl mx-auto rounded-3xl shadow-xl bg-white/80 backdrop-blur-md p-10 border border-blue-100">
         <div className="flex flex-col md:flex-row items-center gap-8">
           <div className="w-32 h-32 rounded-full overflow-hidden shadow-md ring-4 ring-blue-300">

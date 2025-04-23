@@ -34,6 +34,9 @@ app.use("/api/auth", authRoutes);
 const userRoutes = require("./src/routes/user/userRoutes");
 app.use("/api/user", userRoutes);
 
+const aiRoutes = require("./src/routes/ai/aiRoutes")
+app.use("/api/ai", aiRoutes);
+
 // ✅ Health check
 app.get("/", (req, res) => {
   res.send("🔥 Local Memory API running.");

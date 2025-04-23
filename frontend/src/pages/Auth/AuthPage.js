@@ -6,7 +6,7 @@ const AuthPage = () => {
   const navigate = useNavigate();
 
   const [step, setStep] = useState(0);
-  const [aiPrompt, setAiPrompt] = useState("Hi there 👋 I'm LUNA, your flavor guide. Can I get your email to get started?");
+  const [aiPrompt, setAiPrompt] = useState("Hi there 👋 I'm Lunr, your flavor guide. Can I get your email to get started?");
   const [inputValue, setInputValue] = useState("");
   const [userData, setUserData] = useState({});
   const [isExistingUser, setIsExistingUser] = useState(null);

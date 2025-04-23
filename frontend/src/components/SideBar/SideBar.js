@@ -20,7 +20,7 @@ const Sidebar = () => {
 
   return (
     <div className="w-52 bg-white shadow-md p-4 space-y-4">
-      <h1 className="text-xl font-bold text-center">🍱 Memo</h1>
+      <h1 className="text-xl font-bold text-center"></h1>
       {navItem(`/${username}/feed`, "Home", "🏠")}
       {navItem(`/${username}/create`, "Create Memory", "➕")}
       {navItem(`/${username}/chat`, "Chat", "💬")}
