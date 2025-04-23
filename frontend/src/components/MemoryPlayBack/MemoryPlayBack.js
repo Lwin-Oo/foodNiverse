@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../../utils/api";
 
 const MemoryPlayback = ({ memory, onClose }) => {
   const [embedUrl, setEmbedUrl] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchMusic = async () => {
@@ -27,6 +29,8 @@ const MemoryPlayback = ({ memory, onClose }) => {
 
     fetchMusic();
   }, [memory]);
+
+  const creatorName = memory.name || memory.email?.split("@")[0] || "someone";
 
   return (
     <div className="fixed inset-0 z-[999] bg-black/80 flex items-center justify-center">
@@ -80,6 +84,21 @@ const MemoryPlayback = ({ memory, onClose }) => {
           {memory.meaning && (
             <p className="mt-1 italic text-gray-600">Meaning: {memory.meaning}/5</p>
           )}
+        </div>
+
+        {/* Creator Info */}
+        <div
+          className="mt-8 flex items-center gap-3 cursor-pointer"
+          onClick={() => navigate(`/profile/${creatorName}`)}
+        >
+          <img
+            src={`https://api.dicebear.com/7.x/thumbs/svg?seed=${creatorName}`}
+            alt={creatorName}
+            className="w-8 h-8 rounded-full border shadow"
+          />
+          <span className="text-sm text-gray-700 font-semibold hover:underline">
+            @{creatorName}
+          </span>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import API from "../../utils/api";
+import GlobalHeader from "../../components/GlobalHeader/GlobalHeader";
 import MemoryCard from "../../components/MemoryCard/MemoryCard";
 import MemoryPlayback from "../../components/MemoryPlayBack/MemoryPlayBack";
 
@@ -15,6 +16,18 @@ const HomeFeed = () => {
   const groupRefs = useRef({});
   const threadRefs = useRef({});
 
+  const mapEmailsToNames = async (emails) => {
+    try {
+      const res = await API.post("/user/map", { emails });
+  
+      const emailToName = res.data; 
+      return emailToName || {};
+    } catch (err) {
+      console.error("❌ Failed to map emails to names:", err);
+      return {};
+    }
+  };
+  
   // ✅ Redirect if wrong username
   useEffect(() => {
     if (currentUser?.name !== username) {
@@ -24,41 +37,47 @@ const HomeFeed = () => {
 
   // ✅ Fetch memories
   useEffect(() => {
-    const fetchMemories = async () => {
-      try {
-        const [createdRes, featuredRes] = await Promise.all([
-          API.get("/memories"),
-          API.get("/memories/paired"),
-        ]);
-        const all = [...(createdRes.data.memories || []), ...(featuredRes.data.memories || [])];
-        const unique = Array.from(new Map(all.map((m) => [m.id, m])).values());
+  const fetchMemories = async () => {
+    try {
+      const [createdRes, featuredRes] = await Promise.all([
+        API.get("/memories"),
+        API.get("/memories/paired"),
+      ]);
 
-        const formatted = unique.map((m) => {
-          const createdAt = new Date(m.createdAt._seconds * 1000);
-          return {
-            ...m,
-            createdAt,
-            dateFormatted: createdAt.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            }),
-            timeFormatted: createdAt.toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-              hour12: true,
-            }),
-          };
-        });
+      const all = [...(createdRes.data.memories || []), ...(featuredRes.data.memories || [])];
+      const unique = Array.from(new Map(all.map((m) => [m.id, m])).values());
 
-        setMemories(formatted);
-      } catch (err) {
-        console.error("❌ Failed to fetch memories", err);
-      }
-    };
+      const emails = Array.from(new Set(unique.map(m => m.email).filter(Boolean)));
+      const emailToName = await mapEmailsToNames(emails);
 
-    fetchMemories();
-  }, []);
+      const formatted = unique.map((m) => {
+        const createdAt = new Date(m.createdAt._seconds * 1000);
+        return {
+          ...m,
+          name: emailToName[m.email] || m.email?.split("@")[0] || "Someone",
+          createdAt,
+          dateFormatted: createdAt.toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
+          timeFormatted: createdAt.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+          }),
+        };
+      });
+
+      setMemories(formatted);
+    } catch (err) {
+      console.error("❌ Failed to fetch memories", err);
+    }
+  };
+
+  fetchMemories();
+}, []);
+
 
   useLayoutEffect(() => {
     Object.entries(groupRefs.current).forEach(([date, groupEl]) => {
@@ -81,7 +100,9 @@ const HomeFeed = () => {
   }, {});
 
   return (
-    <div className="flex flex-col gap-24 max-w-7xl mx-auto px-4 pt-10">
+    <>
+      <GlobalHeader/>
+      <div className="flex flex-col gap-24 max-w-7xl mx-auto px-4 pt-10">
       {Object.entries(groupedMemories).map(([date, group], i) => {
         const sortedGroup = [...group].sort((a, b) => a.createdAt - b.createdAt);
 
@@ -108,7 +129,7 @@ const HomeFeed = () => {
                           </div>
                         </div>
                       </div>
-                      <div onClick={() => setActiveMemory(memory)} className="cursor-pointer">
+                      <div onClick={() => setActiveMemory({ ...memory, name: memory.name })} className="cursor-pointer">
                         <MemoryCard memory={memory} currentUser={currentUser} />
                       </div>
                     </React.Fragment>
@@ -125,7 +146,9 @@ const HomeFeed = () => {
           onClose={() => setActiveMemory(null)}
         />
       )}
-    </div>
+      </div>
+    </>
+    
   );
 };
 

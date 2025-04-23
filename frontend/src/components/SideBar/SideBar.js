@@ -1,21 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Link, useLocation } from "react-router-dom";
 
 const Sidebar = () => {
   const { pathname } = useLocation();
-  const [username, setUsername] = useState(localStorage.getItem("username"));
-
-  // 🔁 Watch for changes in localStorage
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const storedUsername = localStorage.getItem("username");
-      if (storedUsername !== username) {
-        setUsername(storedUsername);
-      }
-    }, 500); // check every 0.5s
-
-    return () => clearInterval(interval);
-  }, [username]);
+  const user = JSON.parse(localStorage.getItem("user"));
+  const username = user?.name;
 
   const navItem = (path, label, icon) => (
     <Link

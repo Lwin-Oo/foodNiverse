@@ -209,10 +209,39 @@ const getPairedMemories = async (req, res) => {
   }
 };
 
+const getPublicMemories = async (req, res) => {
+  try {
+    const { uid } = req.query;
+    if (!uid) return res.status(400).json({ message: "Missing user ID" });
+
+    const snap = await db
+      .collection("memories")
+      .where("userId", "==", uid)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const memories = snap.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: data.id,
+        image: data.image,
+        journal: data.journal,
+        pairedWith: data.tags || [],
+      };
+    });
+
+    res.status(200).json(memories);
+  } catch (err) {
+    console.error("❌ getPublicMemories error:", err);
+    res.status(500).json({ message: "Failed to fetch memories" });
+  }
+};
+
 module.exports = {
   generateStory,
   addMemory,
   getUserMemories,
   recommendSpotifyTrack,
-  getPairedMemories
+  getPairedMemories,
+  getPublicMemories
 };

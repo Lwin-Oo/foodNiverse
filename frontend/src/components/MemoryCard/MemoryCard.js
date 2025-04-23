@@ -1,4 +1,5 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 
 const getAuraClass = (mood, vibe) => {
   if (mood === "nostalgic") return "bg-gradient-to-r from-[#cbd5e1] via-white to-[#e0e7ff]";
@@ -13,13 +14,14 @@ const getAuraClass = (mood, vibe) => {
 };
 
 const MemoryCard = ({ memory, currentUser }) => {
+  const navigate = useNavigate();
   const auraClass = getAuraClass(memory.mood, memory.vibe);
   const isOwner = memory.userId === currentUser?.uid;
   const isFeatured = Array.isArray(memory.tags)
     ? memory.tags.some(tag => tag.userId === currentUser?.uid)
     : false;
 
-  const creatorName = memory.name || memory.email?.split("@")[0] || "Someone";
+  const creatorName = memory.name || memory.email?.split("@")[0] || "someone";
 
   return (
     <div
@@ -28,17 +30,16 @@ const MemoryCard = ({ memory, currentUser }) => {
         p-4 rounded-[2rem] shadow-xl w-full max-w-[14rem] mx-auto border border-blue-100 ring-1 ring-blue-200
         backdrop-blur-md overflow-hidden
         transition-transform duration-300 hover:-translate-y-1 hover:ring-2
+        min-h-[27rem] max-h-[27rem] flex flex-col justify-between
       `}
     >
-      {/* Romantic Featured Tag */}
       {!isOwner && isFeatured && (
         <div className="absolute top-3 left-3 bg-pink-100 text-pink-700 text-[10px] font-semibold px-3 py-1 rounded-full shadow-sm z-20">
           💌 {creatorName} made this memory with you
         </div>
       )}
 
-      <div className="relative flex flex-col items-center space-y-3 z-10">
-        {/* Image */}
+      <div className="flex flex-col items-center space-y-3 z-10">
         <div className="overflow-hidden rounded-2xl h-40 w-full border-4 border-white shadow-md">
           <img
             src={memory.image}
@@ -47,7 +48,6 @@ const MemoryCard = ({ memory, currentUser }) => {
           />
         </div>
 
-        {/* Mood / Vibe */}
         {(memory.mood || memory.vibe) && (
           <div className="text-[11px] font-medium text-gray-600 italic text-center px-2">
             {memory.mood && memory.vibe
@@ -60,7 +60,7 @@ const MemoryCard = ({ memory, currentUser }) => {
 
         {/* Journal */}
         <div className="text-center px-2">
-          <p className="text-[0.9rem] text-gray-800 leading-relaxed font-serif italic">
+          <p className="text-[0.9rem] text-gray-800 leading-relaxed font-serif italic line-clamp-3 max-h-[4.5rem] overflow-hidden">
             “{memory.journal}”
           </p>
 
@@ -71,7 +71,7 @@ const MemoryCard = ({ memory, currentUser }) => {
           )}
         </div>
 
-        {/* Tag Info */}
+        {/* Tags */}
         {Array.isArray(memory.tags) && memory.tags.length > 0 && (
           <p className="mt-2 text-[11px] font-semibold text-center text-pink-600">
             {isOwner
@@ -79,6 +79,19 @@ const MemoryCard = ({ memory, currentUser }) => {
               : ""}
           </p>
         )}
+      </div>
+
+      {/* Creator info with nav */}
+      <div
+        className="flex items-center gap-2 mt-4 justify-center cursor-pointer"
+        onClick={() => navigate(`/profile/${creatorName}`)}
+      >
+        <img
+          src={`https://api.dicebear.com/7.x/thumbs/svg?seed=${creatorName}`}
+          alt={creatorName}
+          className="w-6 h-6 rounded-full border shadow"
+        />
+        <span className="text-xs text-gray-700 font-medium">{creatorName}</span>
       </div>
     </div>
   );
