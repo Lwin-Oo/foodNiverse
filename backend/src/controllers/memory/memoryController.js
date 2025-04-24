@@ -82,7 +82,6 @@ const addMemory = async (req, res) => {
       location,
       mood,
       vibe,
-      seekingConnection,
       respondingTo,
     } = req.body;
 
@@ -118,8 +117,7 @@ const addMemory = async (req, res) => {
       vibe: vibe || null,
       location: location || null,
       createdAt: new Date(),
-      seekingConnection: seekingConnection || false,
-      respondingTo: respondingTo || null, // ✅ this allows replying to another memory
+      respondingTo: respondingTo || null,
     };
 
     await db.collection("memories").doc(memory.id).set(memory);
@@ -288,30 +286,6 @@ const getPartnerMemories = async (req, res) => {
   }
 };
 
-const getMemorySparks = async (req, res) => {
-  try {
-    const snapshot = await db
-      .collection("memories")
-      .where("seekingConnection", "==", true)
-      .orderBy("createdAt", "desc")
-      .limit(50)
-      .get();
-
-    const sparks = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        ...data,
-        creatorName: data.name || data.email?.split("@")[0] || "user",
-      };
-    });
-
-    res.status(200).json({ sparks });
-  } catch (err) {
-    console.error("❌ Memory Sparks fetch error:", err);
-    res.status(500).json({ message: "Failed to fetch memory sparks" });
-  }
-};
-
 const getMemoryReplies = async (req, res) => {
   try {
     const { sparkId } = req.params;
@@ -376,7 +350,6 @@ module.exports = {
   getPairedMemories,
   getPublicMemories,
   getPartnerMemories,
-  getMemorySparks,
   getMemoryReplies,
   getReplyCounts
 };

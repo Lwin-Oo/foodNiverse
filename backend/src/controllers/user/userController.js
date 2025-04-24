@@ -97,7 +97,6 @@ const getUserVibeSummary = async (req, res) => {
   }
 };
 
-// In userController.js
 const mapEmailsToNames = async (req, res) => {
   try {
     const { emails } = req.body;
@@ -123,10 +122,32 @@ const mapEmailsToNames = async (req, res) => {
   }
 };
 
+const mapUIDsToNames = async (req, res) => {
+  try {
+    const { uids } = req.body;
+    if (!uids || !Array.isArray(uids)) {
+      return res.status(400).json({ message: "Missing or invalid uids array" });
+    }
+
+    const snapshot = await db.collection("users").where("uid", "in", uids).get();
+
+    const result = {};
+    snapshot.forEach(doc => {
+      const user = doc.data();
+      result[user.uid] = user.name;
+    });
+
+    return res.json({ users: result });
+  } catch (err) {
+    console.error("❌ mapUIDsToNames error:", err);
+    res.status(500).json({ message: "Failed to map UIDs to names" });
+  }
+};
 
 module.exports = {
   searchUsers,
   getUserByUsername,
   getUserVibeSummary,
-  mapEmailsToNames
+  mapEmailsToNames,
+  mapUIDsToNames
 };

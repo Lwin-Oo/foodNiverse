@@ -28,6 +28,9 @@ app.use(morgan("dev"));
 const memoryRoutes = require("./src/routes/memory/memoryRoutes");
 app.use("/api/memories", memoryRoutes);
 
+const sparkRoutes = require("./src/routes/spark/sparkRoutes");
+app.use("/api/sparks", sparkRoutes);
+
 const authRoutes = require("./src/routes/auth/authRoutes");
 app.use("/api/auth", authRoutes);
 

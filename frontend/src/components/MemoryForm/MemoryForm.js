@@ -25,7 +25,6 @@ const MemoryForm = ({ onAddMemory, onThreadSuggestion, replyingTo = null, isInli
   const [searchUserInput, setSearchUserInput] = useState("");
   const [userResults, setUserResults] = useState([]);
   const [pairedWith, setPairedWith] = useState([]);
-  const [seekingConnection, setSeekingConnection] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -106,7 +105,6 @@ const MemoryForm = ({ onAddMemory, onThreadSuggestion, replyingTo = null, isInli
           mood,
           vibe,
           location: selectedPlace || null,
-          seekingConnection,
           respondingTo: replyingTo,
         });
   
@@ -339,20 +337,6 @@ const MemoryForm = ({ onAddMemory, onThreadSuggestion, replyingTo = null, isInli
         )}
 
         {errorMsg && <p className="text-sm text-red-500 text-center">{errorMsg}</p>}
-
-        <div className="flex items-center justify-center gap-2">
-  <input
-    type="checkbox"
-    id="seekingConnection"
-    checked={seekingConnection}
-    onChange={(e) => setSeekingConnection(e.target.checked)}
-    className="h-4 w-4 text-blue-600 rounded"
-  />
-  <label htmlFor="seekingConnection" className="text-sm text-gray-700">
-    I'm open to meeting someone through this memory 💫
-  </label>
-</div>
-
         <button
           type="button"
           onClick={handleGenerateStory}
