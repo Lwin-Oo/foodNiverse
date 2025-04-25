@@ -1,8 +1,175 @@
 const { db } = require("../../../server");
 const { OpenAI } = require("openai");
+const fetch = require("node-fetch");
+const axios = require("axios");
 const jwt = require("jsonwebtoken");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_KEY });
 
+const fetchNearbyPlaces = async (lat, lng, keyword = "restaurant") => {
+    const key = process.env.GOOGLE_MAPS_KEY;
+    const radius = 3000;
+    const type = "restaurant";
+  
+    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&type=${type}&keyword=${keyword}&key=${key}`;
+  
+    try {
+      const res = await axios.get(url);
+      const data = res.data;
+  
+      console.log("📍 Fetched Nearby Places:");
+      data.results?.forEach((place, i) => {
+        console.log(`  ${i + 1}. ${place.name} — ${place.vicinity}`);
+      });
+  
+      return data.results || [];
+    } catch (err) {
+      console.error("❌ Google Places API Error:", err.message);
+      return [];
+    }
+};
+  
+// Parse suggestion format from GPT
+const parseSuggestion = (text) => {
+    const cleaned = text.replace(/^["']|["']$/g, "").trim();
+    console.log("🧾 Raw GPT Suggestion:", cleaned);
+  
+    const structuredMatch = cleaned.match(
+      /^(How about(?: trying)?|Try|Go to)\s+(.*?)\s+(?:at|on|in|near)\s+(.*?)(?:[.?!])?$/i
+    );
+  
+    if (structuredMatch) {
+      let intro = structuredMatch[1].trim();
+      let name = structuredMatch[2].trim();
+      let address = structuredMatch[3].trim();
+  
+      // 🔍 If name is generic (e.g., "grabbing a bite") and address starts with real name
+      const addressParts = address.split(",");
+      if (
+        ["grabbing a bite", "having lunch", "having dinner", "eating"].includes(name.toLowerCase()) &&
+        addressParts.length > 1
+      ) {
+        name = addressParts[0].trim();
+        address = addressParts.slice(1).join(",").trim();
+      }
+  
+      console.log("✅ Parsed (structured):", { intro, name, address });
+      return { intro, name, address };
+    }
+  
+    // Fallback logic (same as before)
+    const fallbackMatch = cleaned.match(/^(How about(?: trying)?|Try|Go to)\s+(.*)$/i);
+    if (fallbackMatch) {
+      const intro = fallbackMatch[1].trim();
+      const rest = fallbackMatch[2].trim();
+  
+      const lastCommaIndex = rest.lastIndexOf(",");
+      if (lastCommaIndex !== -1) {
+        const name = rest.slice(0, lastCommaIndex).trim();
+        const address = rest.slice(lastCommaIndex + 1).trim();
+        console.log("✅ Parsed (fallback comma):", { intro, name, address });
+        return { intro, name, address };
+      }
+  
+      console.log("⚠️ No comma fallback used.");
+      return { intro, name: rest, address: "" };
+    }
+  
+    console.warn("⚠️ Total fallback.");
+    return { intro: "Suggested Spot", name: cleaned, address: "" };
+};
+  
+// Main controller
+const getSparkSuggestion = async (req, res) => {
+    try {
+      const { text, location } = req.body;
+  
+      if (!text || text.length < 4) {
+        return res.status(400).json({ message: "Too short." });
+      }
+  
+      console.log("📝 Spark Input:", text);
+      console.log("📍 Location:", location);
+  
+      let placeSuggestions = [];
+      if (location?.lat && location?.lng) {
+        const places = await fetchNearbyPlaces(location.lat, location.lng, text);
+        placeSuggestions = places
+          .filter(p => p.name)
+          .slice(0, 5)
+          .map(p => p.name)
+          .filter((val, i, self) => self.indexOf(val) === i); // Deduplicate
+      }
+  
+      const placePrompt = placeSuggestions.length
+        ? `Here are real places nearby: ${placeSuggestions.join(", ")}. Only choose from these.`
+        : "No real place provided — suggest something general but friendly and food-based.";
+  
+      const prompt = [
+        {
+          role: "system",
+          content: `
+You're Lunr, the AI hangout companion for Foodniverse.
+
+Your task is to suggest real places to eat nearby using verified Google Maps data.
+
+⚠️ VERY IMPORTANT: You must return your response in the following **structured JSON format ONLY**:
+
+{
+  "intro": "How about",
+  "name": "Strings Ramen Shop Madison",
+  "address": "311 N Frances St, Madison, WI"
+}
+
+💡 Rules:
+- Only use place names from the list below.
+- Make sure the **name** is just the restaurant name. Do not include verbs like "grabbing a bite".
+- Make sure the **address** contains street + city, with no trailing punctuation.
+- Keep the **intro** short (like "How about", "Try", etc).
+- Do not wrap the response in markdown or quotes. Only return raw JSON.
+
+🔍 Allowed Places:
+${placeSuggestions.join(", ")}
+
+If you cannot find a match, create a general food suggestion but still respond in JSON format using:
+{
+  "intro": "Suggested Spot",
+  "name": "Friendly Restaurant",
+  "address": "Somewhere in Madison, WI"
+}
+`
+
+        },
+        {
+          role: "user",
+          content: `User typed: "${text}"`
+        }
+      ];
+  
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: prompt
+      });
+  
+      const rawSuggestion = completion.choices[0].message.content.trim();
+
+let structured;
+try {
+  structured = JSON.parse(rawSuggestion);
+  console.log("✅ Parsed (structured):", structured);
+  return res.json({ suggestion: structured });
+} catch (e) {
+  console.warn("⚠️ Failed to parse structured suggestion. Fallback used.");
+  const { intro, name, address } = parseSuggestion(rawSuggestion);
+  return res.json({ suggestion: { intro, name, address } });
+}
+
+  
+    } catch (err) {
+      console.error("❌ Lunr Spark Suggestion Failed:", err);
+      return res.status(500).json({ message: "Lunr hiccup. Couldn’t generate suggestion." });
+    }
+};
+  
 const chatWithLunr = async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -125,8 +292,7 @@ const chatWithLunr = async (req, res) => {
       console.error("❌ Lunr AI chat error:", err);
       return res.status(500).json({ message: "Lunr had a hiccup." });
     }
-  };
-  
+};
 
 const detectThreadBetweenUsers = async (req, res) => {
   try {
@@ -210,4 +376,4 @@ UserNote: ${memory.userNote}
   }
 };
 
-module.exports = { chatWithLunr, detectThreadBetweenUsers, createThread, runConnectionAgent };
+module.exports = { chatWithLunr, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent };
