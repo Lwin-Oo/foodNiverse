@@ -118,6 +118,7 @@ Your task is to suggest real places to eat nearby using verified Google Maps dat
   "intro": "How about",
   "name": "Strings Ramen Shop Madison",
   "address": "311 N Frances St, Madison, WI"
+  "category": "Cravings" // One of: Cravings, Connections, Experiences, Finds
 }
 
 💡 Rules:
@@ -125,7 +126,13 @@ Your task is to suggest real places to eat nearby using verified Google Maps dat
 - Make sure the **name** is just the restaurant name. Do not include verbs like "grabbing a bite".
 - Make sure the **address** contains street + city, with no trailing punctuation.
 - Keep the **intro** short (like "How about", "Try", etc).
+- Add a **category** field based on user's intent:
+  - If craving food, drinks → "Cravings"
+  - If seeking people to meet, cowork, or hangout → "Connections"
+  - If seeking events, popups, activities → "Experiences"
+  - If trying to find or buy items → "Finds"
 - Do not wrap the response in markdown or quotes. Only return raw JSON.
+
 
 🔍 Allowed Places:
 ${placeSuggestions.join(", ")}

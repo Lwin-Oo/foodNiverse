@@ -5,6 +5,7 @@ import GlobalHeader from "../../components/GlobalHeader/GlobalHeader";
 import MemoryForm from "../../components/MemoryForm/MemoryForm";
 import PostSparkForm from "../../components/PostSparkForm/PostSparkForm";
 import SparkCard from "../../components/SparkCard/SparkCard";
+import ReplyForm from "../../components/ReplyForm/ReplyForm";
 
 const MemorySparks = () => {
   const currentUser = JSON.parse(localStorage.getItem("user"));
@@ -12,8 +13,9 @@ const MemorySparks = () => {
 
   const [sparks, setSparks] = useState([]);
   const [reflectsMap, setReflectsMap] = useState({});
+  const [repliesMap, setRepliesMap] = useState({});
   const [userMap, setUserMap] = useState({});
-  const [expandedSparkId, setExpandedSparkId] = useState(null);
+  const [expandedReplies, setExpandedReplies] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeReply, setActiveReply] = useState(null);
   const [replyingToSpark, setReplyingToSpark] = useState(null);
@@ -29,18 +31,24 @@ const MemorySparks = () => {
         setSparks(sparksFetched);
 
         const reflectData = {};
+        const replyData = {};
         const uids = new Set();
 
         for (const spark of sparksFetched) {
           const reflectRes = await API.get(`/sparks/${spark.id}/reflects`);
           const reflects = reflectRes.data.reflects || [];
           reflectData[spark.id] = reflects;
-          reflects.forEach((mem) => {
-            if (mem.userId) uids.add(mem.userId);
-          });
+
+          const replyRes = await API.get(`/sparks/${spark.id}/replies`);
+          const replies = replyRes.data.replies || [];
+          replyData[spark.id] = replies;
+
+          reflects.forEach((mem) => { if (mem.userId) uids.add(mem.userId); });
+          replies.forEach((r) => { if (r.userId) uids.add(r.userId); });
         }
 
         setReflectsMap(reflectData);
+        setRepliesMap(replyData);
 
         const uidArray = Array.from(uids);
         if (uidArray.length) {
@@ -53,11 +61,15 @@ const MemorySparks = () => {
         setLoading(false);
       }
     };
+
     fetchAll();
   }, []);
 
-  const handleToggleReflect = (sparkId) => {
-    setExpandedSparkId((prev) => (prev === sparkId ? null : sparkId));
+  const handleToggleReplies = (sparkId) => {
+    setExpandedReplies((prev) => ({
+      ...prev,
+      [sparkId]: !prev[sparkId]
+    }));
   };
 
   const handlePostSpark = async (data) => {
@@ -66,13 +78,14 @@ const MemorySparks = () => {
       const newSpark = res.data.spark;
       setSparks((prev) => [newSpark, ...prev]);
       setReflectsMap((prev) => ({ ...prev, [newSpark.id]: [] }));
+      setRepliesMap((prev) => ({ ...prev, [newSpark.id]: [] }));
     } catch (err) {
       console.error("❌ Failed to post spark:", err);
     }
   };
 
   const handleReplySubmit = (newReply, sparkId) => {
-    setReflectsMap((prev) => ({
+    setRepliesMap((prev) => ({
       ...prev,
       [sparkId]: [newReply, ...(prev[sparkId] || [])],
     }));
@@ -158,6 +171,7 @@ const MemorySparks = () => {
               const sparkId = spark.id;
               const loved = spark.lovedBy?.includes(currentUser.uid);
               const reflects = reflectsMap[sparkId] || [];
+              const replies = repliesMap[sparkId] || [];
 
               return (
                 <div key={sparkId} className="max-w-md mx-auto bg-white shadow-md rounded-xl p-4">
@@ -179,54 +193,40 @@ const MemorySparks = () => {
                       🔁 Share {spark.shareCount > 0 && <span className="text-gray-500">({spark.shareCount})</span>}
                     </button>
                     <button
-                      className="flex-1 py-2 hover:bg-gray-100 transition font-semibold flex items-center justify-center gap-1"
-                      onClick={() => handleToggleReflect(sparkId)}
+                      className="flex-1 py-2 hover:bg-gray-100 transition flex items-center justify-center gap-1"
+                      onClick={() => handleToggleReplies(sparkId)}
                     >
-                      🪞 Reflect {reflects.length > 0 && <span className="text-blue-500">({reflects.length})</span>}
+                      💬 Reply {replies.length > 0 && <span className="text-blue-500">({replies.length})</span>}
                     </button>
                   </div>
 
-                  {expandedSparkId === sparkId && (
+                  {expandedReplies[sparkId] && (
                     <div className="mt-3 space-y-3 border-t pt-3 border-dashed">
+                      {replies.map((r, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <img
+                            src={`https://api.dicebear.com/7.x/thumbs/svg?seed=${r.name}`}
+                            alt={r.name}
+                            className="w-7 h-7 rounded-full border"
+                          />
+                          <div className="text-xs text-gray-700 flex-1">
+                            <p className="font-semibold">
+                              {userMap[r.userId] || r.name || r.email?.split("@")[0]}
+                            </p>
+                            <p className="italic text-gray-600">“{r.journal.slice(0, 200)}...”</p>
+                          </div>
+                        </div>
+                      ))}
+
                       <button
                         onClick={() => {
                           setActiveReply(sparkId);
                           setReplyingToSpark(spark);
                         }}
-                        className="text-[12px] text-indigo-600 hover:underline font-semibold mb-2"
+                        className="text-xs text-indigo-600 hover:underline font-semibold"
                       >
-                        ➕ Add Your Reflection
+                        ➕ Leave a Reply
                       </button>
-                      {reflects.map((mem, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <img
-                            src={`https://api.dicebear.com/7.x/thumbs/svg?seed=${mem.name}`}
-                            alt={mem.name}
-                            className="w-7 h-7 rounded-full border"
-                          />
-                          <div className="text-xs text-gray-700 flex-1">
-                            <div className="flex justify-between">
-                              <p className="font-semibold">
-                                {userMap[mem.userId] || mem.name || mem.email?.split("@")[0]}
-                              </p>
-                              {mem.meaning && (
-                                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px]">
-                                  Meaning: {mem.meaning}/5
-                                </span>
-                              )}
-                            </div>
-                            {mem.image && (
-                              <img
-                                src={mem.image}
-                                alt="Memory"
-                                className="my-2 w-full h-32 object-cover rounded-md shadow"
-                              />
-                            )}
-                            <p className="italic text-gray-600 line-clamp-2">“{mem.journal.slice(0, 200)}...”</p>
-                            <p className="text-[10px] text-gray-400 mt-1">{mem.location?.description}</p>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   )}
                 </div>
@@ -238,7 +238,7 @@ const MemorySparks = () => {
 
       {activeReply && replyingToSpark && (
         <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
+          <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <button
               onClick={() => {
                 setActiveReply(null);
@@ -249,11 +249,15 @@ const MemorySparks = () => {
               &times;
             </button>
             <h2 className="text-lg font-semibold text-gray-800 text-center mb-3">
-              Reflect on this Spark ✨
+              Leave a Reply ✨
             </h2>
-            <MemoryForm
+            <ReplyForm
               replyingTo={replyingToSpark.id}
-              onAddMemory={(mem) => handleReplySubmit(mem, replyingToSpark.id)}
+              onAddReply={(reply, sparkId) => handleReplySubmit(reply, sparkId)}
+              onClose={() => {
+                setActiveReply(null);
+                setReplyingToSpark(null);
+              }}
             />
           </div>
         </div>

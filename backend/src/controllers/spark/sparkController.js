@@ -1,5 +1,7 @@
 const { db, admin } = require("../../../server");
 const { v4: uuidv4 } = require("uuid");
+const { OpenAI } = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_KEY });
 
 // 🧠 Create Spark
 const createSpark = async (req, res) => {
@@ -54,13 +56,69 @@ const createSpark = async (req, res) => {
       };
   
       await db.collection("sparks").doc(spark.id).set(spark);
+      
+      await LunrAutoCommentOnSpark(spark);
+
       res.status(201).json({ message: "Spark created", spark });
+
     } catch (err) {
       console.error("❌ createSpark error:", err);
       res.status(500).json({ message: "Failed to create spark" });
     }
   };
 
+const LunrAutoCommentOnSpark = async (spark) => {
+    try {
+      const prompt = `
+  A user just posted a new Spark.
+  
+  Spark Details:
+  - Journal: "${spark.journal}"
+  - Mood: ${spark.mood}
+  - Vibe: ${spark.vibe}
+  - Occasion: ${spark.occasion}
+  - Location: ${spark.location?.description || "Unknown"}
+  - Time: ${spark.time}
+  - Category: ${spark.category}
+  
+  You are Lunr, their friendly neighborhood AI.  
+  Leave a short, natural, warm human comment reacting to this post.  
+  Sound casual but thoughtful.  
+  Do NOT be robotic. Be real, like a local friend replying on the internet.
+  
+  Examples:
+  - "Omg sounds amazing, cozy vibes 🔥 where exactly is this place?"
+  - "This makes me want to grab a coffee too haha, let's go!"
+  - "Nostalgia hits hard with this. Hope you have a beautiful day 🌸."
+  
+  Now write your comment:
+      `;
+  
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+      });
+  
+      const replyText = completion.choices[0].message.content.trim();
+  
+      const reply = {
+        id: uuidv4(),
+        userId: "lunr-ai", // Lunr bot
+        email: "lunr@foodniverse.ai",
+        name: "Lunr",
+        journal: replyText,
+        respondingTo: spark.id,
+        createdAt: new Date(),
+      };
+  
+      await db.collection("replies").doc(reply.id).set(reply);
+  
+      console.log(`✅ Lunr auto-commented on Spark ${spark.id}`);
+    } catch (err) {
+      console.error("❌ Lunr auto-comment failed:", err);
+    }
+  };
+  
 // ✨ Fetch Sparks
 const getSparks = async (req, res) => {
   try {
@@ -145,6 +203,57 @@ const shareSpark = async (req, res) => {
   }
 };
 
+const createReply = async (req, res) => {
+    try {
+      const user = req.user;
+      const { journal } = req.body;
+      const { sparkId } = req.params;
+  
+      if (!user?.uid || !journal || !sparkId) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+  
+      const reply = {
+        id: uuidv4(),
+        userId: user.uid,
+        email: user.email,
+        name: user.name || user.email.split("@")[0],
+        journal: journal.trim(),
+        respondingTo: sparkId,
+        createdAt: new Date(),
+      };
+  
+      await db.collection("replies").doc(reply.id).set(reply);
+  
+      res.status(201).json({ message: "Reply created", reply });
+    } catch (err) {
+      console.error("❌ createReply error:", err);
+      res.status(500).json({ message: "Failed to create reply" });
+    }
+};
+
+const getReplies = async (req, res) => {
+    try {
+      const { sparkId } = req.params;
+      if (!sparkId) return res.status(400).json({ message: "Missing sparkId" });
+  
+      const snapshot = await db
+        .collection("replies")
+        .where("respondingTo", "==", sparkId)
+        .get(); // No .orderBy()
+  
+      const replies = snapshot.docs
+        .map((doc) => doc.data())
+        .sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
+  
+      res.status(200).json({ replies });
+    } catch (err) {
+      console.error("❌ getReplies error:", err);
+      res.status(500).json({ message: "Failed to fetch replies" });
+    }
+  };
+  
+
 // 📌 Get Reflects for a Spark
 const getReflects = async (req, res) => {
     try {
@@ -169,8 +278,11 @@ const getReflects = async (req, res) => {
  
 module.exports = {
   createSpark,
+  LunrAutoCommentOnSpark,
   getSparks,
   loveSpark,
   shareSpark,
-  getReflects
+  createReply,
+  getReflects,
+  getReplies
 };

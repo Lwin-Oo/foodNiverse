@@ -83,6 +83,9 @@ const PostSparkForm = ({ onSubmit, onClose }) => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setLunrSuggestion(res.data.suggestion);
+        if (res.data.suggestion?.category) {
+            setForm(prev => ({ ...prev, category: res.data.suggestion.category }));
+        }
       } catch (err) {
         console.error("❌ Lunr AI suggestion error:", err);
       }
@@ -90,6 +93,7 @@ const PostSparkForm = ({ onSubmit, onClose }) => {
     const debounce = setTimeout(fetchSuggestion, 600);
     return () => clearTimeout(debounce);
   }, [form.journal, selectedPlace]);
+  
 
   const splitSuggestion = (text) => {
     if (!text || typeof text !== "string") {
@@ -168,15 +172,18 @@ const PostSparkForm = ({ onSubmit, onClose }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.journal || !form.mood || !form.vibe || !form.occasion || !form.time || !selectedPlace) return;
+    if (!form.journal || !form.mood || !form.vibe || !form.occasion || !form.time || !form.category || !selectedPlace) return;
+    
     const spark = { ...form, location: selectedPlace, image: "" };
     onSubmit(spark);
-    setForm({ journal: "", mood: "", vibe: "", occasion: "", time: "" });
+  
+    setForm({ journal: "", mood: "", vibe: "", occasion: "", time: "", category: "" });
     setValue("");
     setSelectedPlace(null);
     setLunrSuggestion("");
     onClose();
   };
+  
 
   return (
     <div className="bg-white w-full max-w-md mx-auto rounded-xl p-6 shadow-xl border border-blue-100 space-y-4">
@@ -193,7 +200,7 @@ const PostSparkForm = ({ onSubmit, onClose }) => {
           <textarea
             value={form.journal}
             onChange={(e) => setForm({ ...form, journal: e.target.value })}
-            placeholder="What’s on your mind?"
+            placeholder="Spark a craving, a connection, an experience, or a find."
             rows={2}
             className="w-full border border-gray-300 rounded-md p-2 text-sm"
           />
