@@ -67,32 +67,48 @@ const createSpark = async (req, res) => {
     }
   };
 
-const LunrAutoCommentOnSpark = async (spark) => {
+  const LunrAutoCommentOnSpark = async (spark) => {
     try {
-      const prompt = `
-  A user just posted a new Spark.
-  
-  Spark Details:
-  - Journal: "${spark.journal}"
-  - Mood: ${spark.mood}
-  - Vibe: ${spark.vibe}
-  - Occasion: ${spark.occasion}
-  - Location: ${spark.location?.description || "Unknown"}
-  - Time: ${spark.time}
-  - Category: ${spark.category}
-  
-  You are Lunr, their friendly neighborhood AI.  
-  Leave a short, natural, warm human comment reacting to this post.  
-  Sound casual but thoughtful.  
-  Do NOT be robotic. Be real, like a local friend replying on the internet.
-  
-  Examples:
-  - "Omg sounds amazing, cozy vibes 🔥 where exactly is this place?"
-  - "This makes me want to grab a coffee too haha, let's go!"
-  - "Nostalgia hits hard with this. Hope you have a beautiful day 🌸."
-  
-  Now write your comment:
-      `;
+        const locationDescription = spark.location?.description || "Unknown";
+        const lat = spark.location?.lat;
+        const lng = spark.location?.lng;
+        
+        let mapsLink = "";
+        
+        if (locationDescription && locationDescription !== "Unknown") {
+          // Search by Place Name
+          mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationDescription)}`;
+        } else if (lat && lng) {
+          // Fallback: Just coordinates if no description
+          mapsLink = `https://maps.google.com/?q=${lat},${lng}`;
+        }
+        
+        // ✨ Add link inside GPT prompt
+        const prompt = `
+        A user just posted a new Spark.
+        
+        Spark Details:
+        - Journal: "${spark.journal}"
+        - Mood: ${spark.mood}
+        - Vibe: ${spark.vibe}
+        - Occasion: ${spark.occasion}
+        - Location: ${spark.location?.description || "Unknown"}
+        - Time: ${spark.time}
+        - Maps Link: ${mapsLink}
+        
+        You are Lunr, their friendly neighborhood AI.
+        Leave a short, natural, warm human comment reacting to this post.
+        At the end, casually drop the link like this: [View on Maps](${mapsLink})
+        Sound casual but thoughtful. Be real, like a local friend replying on the internet.
+        
+        Examples:
+        - "Omg sounds amazing, cozy vibes 🔥 where exactly is this place?"
+        - "This makes me want to grab a coffee too haha, let's go!"
+        - "Nostalgia hits hard with this. Hope you have a beautiful day 🌸."
+        
+        Now write your comment:
+        `;
+        
   
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -103,7 +119,7 @@ const LunrAutoCommentOnSpark = async (spark) => {
   
       const reply = {
         id: uuidv4(),
-        userId: "lunr-ai", // Lunr bot
+        userId: "lunr-ai", // Lunr bot ID
         email: "lunr@foodniverse.ai",
         name: "Lunr",
         journal: replyText,

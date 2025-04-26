@@ -213,8 +213,26 @@ const MemorySparks = () => {
                             <p className="font-semibold">
                               {userMap[r.userId] || r.name || r.email?.split("@")[0]}
                             </p>
-                            <p className="italic text-gray-600">“{r.journal.slice(0, 200)}...”</p>
-                          </div>
+                            <p className="italic text-gray-600">
+                                {r.journal.split(/(\[.*?\]\(.*?\))/g).map((part, idx) => {
+                                    const match = part.match(/\[(.*?)\]\((.*?)\)/);
+                                    if (match) {
+                                        return (
+                                                    <a
+                                                        key={idx}
+                                                        href={match[2]}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-blue-600 underline hover:text-blue-800"
+                                                    >
+                                                {match[1]}
+                                            </a>
+                                        );
+                                    }
+                                        return <span key={idx}>{part}</span>;
+                                    })}
+                                </p>
+                            </div>
                         </div>
                       ))}
 
