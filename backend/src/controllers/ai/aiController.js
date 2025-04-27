@@ -144,8 +144,7 @@ If you cannot find a match, create a general food suggestion but still respond i
   "address": "Somewhere in Madison, WI"
 }
 `
-
-        },
+    },
         {
           role: "user",
           content: `User typed: "${text}"`
@@ -301,6 +300,146 @@ const chatWithLunr = async (req, res) => {
     }
 };
 
+const initialTasteProfile = {
+    flavors: { Sweet: 0, Salty: 0, Sour: 0, Bitter: 0, Umami: 0 },
+    aromas: { Fruity: 0, Floral: 0, Herbal: 0, Earthy: 0, Smoky: 0, Spicy: 0 },
+    textures: { Crunchy: 0, Creamy: 0, Chewy: 0, Juicy: 0, Smooth: 0 },
+    temperatures: { Hot: 0, Cold: 0, Room: 0 },
+    culturalFocus: 0,
+    explorationTendency: 0,
+    dietaryRestrictions: [],
+  };
+  
+  let tasteSessionMap = {};
+  
+  // Start taste profiling session
+  const startTasteProfiler = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.uid;
+  
+      tasteSessionMap[userId] = {
+        profile: JSON.parse(JSON.stringify(initialTasteProfile)),
+        history: [],
+        finished: false,
+      };
+  
+      return res.json({ message: "Taste Profiler session started!" });
+    } catch (err) {
+      console.error("❌ Taste Profiler start error:", err);
+      return res.status(500).json({ message: "Failed to start." });
+    }
+  };
+  
+  // Handle user reply and ask next smart question
+  const handleTasteProfilerChat = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.uid;
+      const userInput = req.body.text;
+  
+      const session = tasteSessionMap[userId];
+      if (!session || session.finished) {
+        return res.status(400).json({ message: "No active taste profiler session." });
+      }
+  
+      // 🧠 Give GPT full control
+      const gptPrompt = `
+  You are Lunr 🌙, a smart foodie AI.
+  You are helping a user discover their true taste profile through casual, smart conversation.
+  
+  Here’s what you already know about their taste:
+  
+  ${JSON.stringify(session.profile)}
+  
+  Their last reply was:
+  
+  "${userInput}"
+  
+  ---
+  
+  ✅ Based on their answer, update the profile.  
+  ✅ Then generate the next question you should ask (ONLY if the profile isn't fully filled yet).
+  ✅ Speak casually like a foodie friend.
+  
+  ⚡ Taste Profile Fields:
+  - flavors: Sweet, Salty, Sour, Bitter, Umami
+  - aromas: Fruity, Floral, Herbal, Earthy, Smoky, Spicy
+  - textures: Crunchy, Creamy, Chewy, Juicy, Smooth
+  - temperatures: Hot, Cold, Room
+  - culturalFocus / explorationTendency
+  - dietaryRestrictions
+  
+  🏁 If user completed the entire profile, say: "All set! Your foodie passport is ready 🚀."
+  
+  Respond ONLY in raw JSON:
+  
+  {
+    "profileUpdate": { updated fields },
+    "nextQuestion": "smart next question OR null if done"
+  }
+      `;
+  
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "user", content: gptPrompt }],
+      });
+  
+      let rawText = completion.choices[0].message.content.trim();
+
+// 🧹 Clean codeblock if GPT wrapped it in ```
+if (rawText.startsWith("```")) {
+  rawText = rawText.replace(/```[a-z]*\n?/gi, "").replace(/```$/, "").trim();
+}
+
+const parsed = JSON.parse(rawText);
+
+  
+      // 🛠️ Merge profile update
+      const mergeCategory = (cat) => {
+        if (parsed.profileUpdate?.[cat]) {
+          for (const key in parsed.profileUpdate[cat]) {
+            session.profile[cat][key] = parsed.profileUpdate[cat][key];
+          }
+        }
+      };
+      mergeCategory("flavors");
+      mergeCategory("aromas");
+      mergeCategory("textures");
+      mergeCategory("temperatures");
+  
+      if (parsed.profileUpdate?.culturalFocus !== undefined) {
+        session.profile.culturalFocus = parsed.profileUpdate.culturalFocus;
+      }
+      if (parsed.profileUpdate?.explorationTendency !== undefined) {
+        session.profile.explorationTendency = parsed.profileUpdate.explorationTendency;
+      }
+      if (parsed.profileUpdate?.dietaryRestrictions?.length) {
+        session.profile.dietaryRestrictions.push(...parsed.profileUpdate.dietaryRestrictions);
+      }
+  
+      session.history.push({ userInput, parsed });
+  
+      // 🏁 If no next question → complete profiling
+      if (!parsed.nextQuestion) {
+        session.finished = true;
+        await db.collection("users").doc(userId).update({ tasteProfile: session.profile });
+        delete tasteSessionMap[userId];
+  
+        return res.json({ done: true, message: "Taste Profile completed!", profile: session.profile });
+      }
+  
+      // ➡️ Continue asking
+      return res.json({ done: false, nextQuestion: parsed.nextQuestion });
+  
+    } catch (err) {
+      console.error("❌ Taste Profiler chat error:", err);
+      return res.status(500).json({ message: "Failed to handle chat." });
+    }
+  };
+
 const detectThreadBetweenUsers = async (req, res) => {
   try {
     const { userId, partnerEmail } = req.body;
@@ -383,4 +522,4 @@ UserNote: ${memory.userNote}
   }
 };
 
-module.exports = { chatWithLunr, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent };
+module.exports = { chatWithLunr, startTasteProfiler, handleTasteProfilerChat, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent };

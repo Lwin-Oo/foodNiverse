@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { FaRobot, FaTimes } from "react-icons/fa";
-import API from "../../utils/api"; // ✅ your custom axios instance
+import API from "../../utils/api";
 
 const AIAgentBubble = ({
   mode = "manual",           // "manual" or "triggered"
-  partnerName = "",          // needed for "triggered"
+  partnerName = "",          // for triggered thread
   aiMessage = "",            // optional GPT message
-  onConfirm = () => {},      // thread creation
-  onClose = () => {}         // bubble close
+  onConfirm = () => {},      // thread creation callback
+  onClose = () => {}         // close bubble callback
 }) => {
   const [open, setOpen] = useState(mode === "triggered");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [chatSessionMode, setChatSessionMode] = useState("normal"); // normal | tasteProfiler
 
   useEffect(() => {
     if (mode === "triggered" && partnerName) {
@@ -23,35 +24,72 @@ const AIAgentBubble = ({
     } else if (mode === "manual") {
       setMessages([
         { sender: "ai", text: "Hi there 🌙 I'm Lunr — your Foodniverse assistant. Ask me anything!" },
+        { sender: "ai", text: "Or if you're ready, type **Start my Taste Journey** to begin building your unique Foodie Passport! 🍴" },
       ]);
     }
   }, [mode, partnerName, aiMessage]);
 
   const sendReply = async () => {
     if (!input.trim()) return;
-
-    const userMsg = { sender: "user", text: input };
+    const userInput = input.trim();
+    const userMsg = { sender: "user", text: userInput };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
 
     try {
-      const res = await API.post("/ai/chat", { prompt: input }); // ✅ uses API
-      const aiReply = res.data.reply;
-      setMessages(prev => [...prev, { sender: "ai", text: aiReply }]);
+      if (chatSessionMode === "tasteProfiler") {
+        // 🚀 Taste Profiling Mode
+        const res = await API.post("/ai/taste-profiler/chat", { text: userInput });
+
+        if (res.data.done) {
+          setChatSessionMode("normal");
+          setMessages(prev => [
+            ...prev,
+            { sender: "ai", text: "🎉 Done! Your Taste Passport is ready! Let's explore flavors perfect for you." }
+          ]);
+        } else {
+          setMessages(prev => [
+            ...prev,
+            { sender: "ai", text: res.data.nextQuestion }
+          ]);
+        }
+      } else {
+        // 🧠 Normal Chat Mode
+        if (userInput.toLowerCase().includes("start my taste journey")) {
+          // Start taste profiling
+          await API.post("/ai/taste-profiler/start");
+          setChatSessionMode("tasteProfiler");
+
+          setMessages(prev => [
+            ...prev,
+            { sender: "ai", text: "Awesome! Let's craft your unique Food Profile... 🍽️💬" }
+          ]);
+
+          const startQuestion = await API.post("/ai/taste-profiler/chat", { text: "start" });
+          setMessages(prev => [
+            ...prev,
+            { sender: "ai", text: startQuestion.data.nextQuestion }
+          ]);
+        } else {
+          const res = await API.post("/ai/chat", { prompt: userInput });
+          setMessages(prev => [...prev, { sender: "ai", text: res.data.reply }]);
+        }
+      }
     } catch (err) {
-      setMessages(prev => [...prev, { sender: "ai", text: "Something went wrong. Try again later." }]);
       console.error("❌ Lunr AI chat error:", err);
+      setMessages(prev => [...prev, { sender: "ai", text: "Oops. Something went wrong, try again later." }]);
     }
   };
 
-  const handleQuickReply = (reply) => {
+  const handleQuickReply = async (reply) => {
     setMessages(prev => [...prev, { sender: "user", text: reply }]);
+
     if (reply.toLowerCase().includes("yes")) {
       setMessages(prev => [...prev, { sender: "ai", text: `Awesome 🌟 Creating the thread...` }]);
-      setTimeout(() => onConfirm(), 1500);
+      setTimeout(() => onConfirm(), 1500); // ✅ create thread
     } else {
-      setMessages(prev => [...prev, { sender: "ai", text: `No worries! Let me know if you change your mind.` }]);
-      setTimeout(() => onClose(), 2000);
+      setMessages(prev => [...prev, { sender: "ai", text: `No worries! I'm here whenever you need me.` }]);
+      setTimeout(() => onClose(), 2000);   // ✅ close bubble
     }
   };
 
@@ -72,13 +110,13 @@ const AIAgentBubble = ({
             ))}
           </div>
 
-          {mode === "manual" ? (
+          {mode === "manual" || chatSessionMode === "tasteProfiler" ? (
             <div className="flex items-center p-2 border-t">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendReply()}
-                placeholder="Ask something..."
+                placeholder="Type your message..."
                 className="flex-1 text-sm px-3 py-2 border rounded-full"
               />
               <button
