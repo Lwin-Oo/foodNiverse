@@ -1,9 +1,10 @@
 // routes/ai/aiRoutes.js
 const express = require("express");
 const router = express.Router();
-const { chatWithLunr, startTasteProfiler, handleTasteProfilerChat, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent } = require("../../controllers/ai/aiController")
+const { chatWithLunr, getTasteProfilerMemory, startTasteProfiler, handleTasteProfilerChat, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent } = require("../../controllers/ai/aiController")
 
 router.post("/chat", chatWithLunr);
+router.get("/taste-profiler/memory", getTasteProfilerMemory);
 router.post("/taste-profiler/start", startTasteProfiler);
 router.post("/taste-profiler/chat", handleTasteProfilerChat);
 router.post("/spark-suggest", getSparkSuggestion);

@@ -14,6 +14,8 @@ const AIAgentBubble = ({
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [chatSessionMode, setChatSessionMode] = useState("normal"); // normal | tasteProfiler
+  const [showMemory, setShowMemory] = useState(false);
+  const [memoryData, setMemoryData] = useState([]);
 
   useEffect(() => {
     if (mode === "triggered" && partnerName) {
@@ -38,14 +40,31 @@ const AIAgentBubble = ({
 
     try {
       if (chatSessionMode === "tasteProfiler") {
-        // 🚀 Taste Profiling Mode
         const res = await API.post("/ai/taste-profiler/chat", { text: userInput });
 
         if (res.data.done) {
+          const profile = res.data.profile;
+
+          const summary = `
+🌟 Here's your Taste Passport:
+
+- Flavors: ${Object.entries(profile.flavors).map(([k, v]) => `${k}: ${v}`).join(", ")}
+- Aromas: ${Object.entries(profile.aromas).map(([k, v]) => `${k}: ${v}`).join(", ")}
+- Textures: ${Object.entries(profile.textures).map(([k, v]) => `${k}: ${v}`).join(", ")}
+- Temperatures: ${Object.entries(profile.temperatures).map(([k, v]) => `${k}: ${v}`).join(", ")}
+- Cultural Focus: ${profile.culturalFocus}
+- Exploration Tendency: ${profile.explorationTendency}
+- Dietary Restrictions: ${profile.dietaryRestrictions.length ? profile.dietaryRestrictions.join(", ") : "None"}
+
+🎯 You're ready to discover amazing food!
+          `.trim();
+
           setChatSessionMode("normal");
+
           setMessages(prev => [
             ...prev,
-            { sender: "ai", text: "🎉 Done! Your Taste Passport is ready! Let's explore flavors perfect for you." }
+            { sender: "ai", text: "🎉 Done! Your Taste Passport is ready! Let's explore flavors perfect for you." },
+            { sender: "ai", text: summary }
           ]);
         } else {
           setMessages(prev => [
@@ -53,10 +72,9 @@ const AIAgentBubble = ({
             { sender: "ai", text: res.data.nextQuestion }
           ]);
         }
+
       } else {
-        // 🧠 Normal Chat Mode
         if (userInput.toLowerCase().includes("start my taste journey")) {
-          // Start taste profiling
           await API.post("/ai/taste-profiler/start");
           setChatSessionMode("tasteProfiler");
 
@@ -81,15 +99,25 @@ const AIAgentBubble = ({
     }
   };
 
+  const fetchTasteMemory = async () => {
+    try {
+      const res = await API.get("/ai/taste-profiler/memory");
+      setMemoryData(res.data.memory);
+      setShowMemory(true);
+    } catch (err) {
+      console.error("❌ Failed to fetch Taste Memory:", err);
+      setMessages(prev => [...prev, { sender: "ai", text: "Oops. Could not load your Taste Journey." }]);
+    }
+  };
+
   const handleQuickReply = async (reply) => {
     setMessages(prev => [...prev, { sender: "user", text: reply }]);
-
     if (reply.toLowerCase().includes("yes")) {
       setMessages(prev => [...prev, { sender: "ai", text: `Awesome 🌟 Creating the thread...` }]);
-      setTimeout(() => onConfirm(), 1500); // ✅ create thread
+      setTimeout(() => onConfirm(), 1500);
     } else {
       setMessages(prev => [...prev, { sender: "ai", text: `No worries! I'm here whenever you need me.` }]);
-      setTimeout(() => onClose(), 2000);   // ✅ close bubble
+      setTimeout(() => onClose(), 2000);
     }
   };
 
@@ -108,22 +136,53 @@ const AIAgentBubble = ({
                 {msg.text}
               </div>
             ))}
+
+            {/* 🚀 Taste Journey Timeline */}
+            {showMemory && (
+              <div className="mt-4 border-t pt-3">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">📜 Your Taste Journey:</h3>
+                {memoryData.map((step, idx) => (
+                  <div key={idx} className="mb-3">
+                    <p className="text-xs text-gray-700">
+                      <b>Step {step.step}:</b> <br />
+                      <i>AI asked:</i> {step.aiQuestion} <br />
+                      <i>You replied:</i> {step.userAnswer}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <i>Reasoning:</i> {step.reasoning.join("; ")}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <i>Updated Taste:</i> {JSON.stringify(step.profileUpdate)}
+                    </p>
+                    <hr className="my-2" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {mode === "manual" || chatSessionMode === "tasteProfiler" ? (
-            <div className="flex items-center p-2 border-t">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendReply()}
-                placeholder="Type your message..."
-                className="flex-1 text-sm px-3 py-2 border rounded-full"
-              />
+            <div className="flex flex-col p-2 border-t">
+              <div className="flex items-center">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && sendReply()}
+                  placeholder="Type your message..."
+                  className="flex-1 text-sm px-3 py-2 border rounded-full"
+                />
+                <button
+                  onClick={sendReply}
+                  className="ml-2 text-sm bg-blue-500 text-white px-4 py-2 rounded-full"
+                >
+                  Send
+                </button>
+              </div>
               <button
-                onClick={sendReply}
-                className="ml-2 text-sm bg-blue-500 text-white px-4 py-2 rounded-full"
+                onClick={fetchTasteMemory}
+                className="mt-2 text-xs text-blue-500 hover:underline"
               >
-                Send
+                📜 View My Full Taste Journey
               </button>
             </div>
           ) : (

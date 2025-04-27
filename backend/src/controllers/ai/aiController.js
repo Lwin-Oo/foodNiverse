@@ -303,16 +303,39 @@ const chatWithLunr = async (req, res) => {
 const initialTasteProfile = {
     flavors: { Sweet: 0, Salty: 0, Sour: 0, Bitter: 0, Umami: 0 },
     aromas: { Fruity: 0, Floral: 0, Herbal: 0, Earthy: 0, Smoky: 0, Spicy: 0 },
-    textures: { Crunchy: 0, Creamy: 0, Chewy: 0, Juicy: 0, Smooth: 0 },
+    textures: { Chewy: 0, Creamy: 0, Crunchy: 0, Juicy: 0, Smooth: 0 },
     temperatures: { Hot: 0, Cold: 0, Room: 0 },
     culturalFocus: 0,
     explorationTendency: 0,
     dietaryRestrictions: [],
   };
   
-  let tasteSessionMap = {};
+  const getTasteProfilerMemory = async (req, res) => {
+    try {
+      const token = req.headers.authorization.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.uid;
   
-  // Start taste profiling session
+      const session = tasteSessionMap[userId];
+      if (!session) {
+        return res.status(400).json({ message: "No active profiling session." });
+      }
+  
+      return res.json({
+        memory: session.memory,
+        profile: session.profile,
+        stepCount: session.stepCount,
+        finished: session.finished
+      });
+    } catch (err) {
+      console.error("❌ getTasteProfilerMemory error:", err);
+      return res.status(500).json({ message: "Failed to fetch memory." });
+    }
+  };
+
+  let tasteSessionMap = {}; // live memory
+  
+  // Start Taste Profiler
   const startTasteProfiler = async (req, res) => {
     try {
       const token = req.headers.authorization.split(" ")[1];
@@ -321,18 +344,19 @@ const initialTasteProfile = {
   
       tasteSessionMap[userId] = {
         profile: JSON.parse(JSON.stringify(initialTasteProfile)),
-        history: [],
+        memory: [],
+        stepCount: 0,
         finished: false,
       };
   
-      return res.json({ message: "Taste Profiler session started!" });
+      return res.json({ message: "Taste Profiler started!" });
     } catch (err) {
-      console.error("❌ Taste Profiler start error:", err);
-      return res.status(500).json({ message: "Failed to start." });
+      console.error("❌ startTasteProfiler error:", err);
+      return res.status(500).json({ message: "Failed to start profiler." });
     }
   };
   
-  // Handle user reply and ask next smart question
+  // Handle Taste Profiler Chat
   const handleTasteProfilerChat = async (req, res) => {
     try {
       const token = req.headers.authorization.split(" ")[1];
@@ -342,103 +366,129 @@ const initialTasteProfile = {
   
       const session = tasteSessionMap[userId];
       if (!session || session.finished) {
-        return res.status(400).json({ message: "No active taste profiler session." });
+        return res.status(400).json({ message: "No active profiling session." });
       }
   
-      // 🧠 Give GPT full control
+      const lastStep = session.memory[session.memory.length - 1];
+  
       const gptPrompt = `
-  You are Lunr 🌙, a smart foodie AI.
-  You are helping a user discover their true taste profile through casual, smart conversation.
-  
-  Here’s what you already know about their taste:
-  
-  ${JSON.stringify(session.profile)}
-  
-  Their last reply was:
-  
-  "${userInput}"
-  
-  ---
-  
-  ✅ Based on their answer, update the profile.  
-  ✅ Then generate the next question you should ask (ONLY if the profile isn't fully filled yet).
-  ✅ Speak casually like a foodie friend.
-  
-  ⚡ Taste Profile Fields:
-  - flavors: Sweet, Salty, Sour, Bitter, Umami
-  - aromas: Fruity, Floral, Herbal, Earthy, Smoky, Spicy
-  - textures: Crunchy, Creamy, Chewy, Juicy, Smooth
-  - temperatures: Hot, Cold, Room
-  - culturalFocus / explorationTendency
-  - dietaryRestrictions
-  
-  🏁 If user completed the entire profile, say: "All set! Your foodie passport is ready 🚀."
-  
-  Respond ONLY in raw JSON:
-  
-  {
-    "profileUpdate": { updated fields },
-    "nextQuestion": "smart next question OR null if done"
-  }
-      `;
+You are Lunr, the smart AI foodie companion.
+You are building a user's food taste profile step-by-step based on natural conversation.
+
+Here is the current state of the user's profile:
+${JSON.stringify(session.profile, null, 2)}
+
+Here is the user's latest reply:
+"${userInput}"
+
+Rules:
+- Update scores between 0 and 10 for each relevant parameter.
+- Increase = positive number. Decrease = negative number.
+- DO NOT use + signs. Only plain numbers like 3, -2.
+- Always explain why you made each score adjustment.
+- Only update scores if the answer gives a clear clue.
+- Otherwise, suggest a new smart question to ask.
+- Speak casually like a foodie friend.
+
+Format your response in raw JSON (no markdown or codeblocks):
+
+{
+  "profileUpdate": {
+    "flavors": {"Sweet": 3, "Sour": -2},
+    "textures": {"Crunchy": 2}
+  },
+  "reasoningLog": [
+    "User loves Shan noodles → boost Umami 3",
+    "User dislikes sushi because cold → boost preference for Hot 4"
+  ],
+  "nextQuestion": "If you could teleport to any food market in the world, where would you go?"
+}
+`;
+
   
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [{ role: "user", content: gptPrompt }],
       });
   
-      let rawText = completion.choices[0].message.content.trim();
-
-// 🧹 Clean codeblock if GPT wrapped it in ```
-if (rawText.startsWith("```")) {
-  rawText = rawText.replace(/```[a-z]*\n?/gi, "").replace(/```$/, "").trim();
-}
-
-const parsed = JSON.parse(rawText);
-
+      let raw = completion.choices[0].message.content.trim();
+      if (raw.startsWith("```")) {
+        raw = raw.replace(/```[a-z]*\n?/gi, "").replace(/```$/, "").trim();
+      }
   
-      // 🛠️ Merge profile update
-      const mergeCategory = (cat) => {
+      const parsed = JSON.parse(raw);
+  
+      // 🚀 LIVE LOGGING IN SERVER for EACH STEP
+      console.log("\n\n===== 🛠️ Lunr Taste Step =====");
+      console.log("👂 User Answer:", userInput);
+      console.log("🧠 AI Reasoning:");
+      parsed.reasoningLog.forEach((r, i) => console.log(`  ${i + 1}. ${r}`));
+      console.log("🎯 Profile Updates:");
+      console.log(JSON.stringify(parsed.profileUpdate, null, 2));
+      console.log("==============================\n\n");
+  
+      // 🛠️ Apply Profile Update
+      for (const cat of ["flavors", "aromas", "textures", "temperatures"]) {
         if (parsed.profileUpdate?.[cat]) {
           for (const key in parsed.profileUpdate[cat]) {
-            session.profile[cat][key] = parsed.profileUpdate[cat][key];
+            session.profile[cat][key] += parsed.profileUpdate[cat][key];
+            if (session.profile[cat][key] > 10) session.profile[cat][key] = 10;
+            if (session.profile[cat][key] < 0) session.profile[cat][key] = 0;
           }
         }
-      };
-      mergeCategory("flavors");
-      mergeCategory("aromas");
-      mergeCategory("textures");
-      mergeCategory("temperatures");
-  
+      }
       if (parsed.profileUpdate?.culturalFocus !== undefined) {
-        session.profile.culturalFocus = parsed.profileUpdate.culturalFocus;
+        session.profile.culturalFocus += parsed.profileUpdate.culturalFocus;
+        if (session.profile.culturalFocus > 10) session.profile.culturalFocus = 10;
       }
       if (parsed.profileUpdate?.explorationTendency !== undefined) {
-        session.profile.explorationTendency = parsed.profileUpdate.explorationTendency;
+        session.profile.explorationTendency += parsed.profileUpdate.explorationTendency;
+        if (session.profile.explorationTendency > 10) session.profile.explorationTendency = 10;
       }
       if (parsed.profileUpdate?.dietaryRestrictions?.length) {
         session.profile.dietaryRestrictions.push(...parsed.profileUpdate.dietaryRestrictions);
       }
   
-      session.history.push({ userInput, parsed });
+      // Save memory
+      session.memory.push({
+        step: session.stepCount + 1,
+        aiQuestion: lastStep?.nextQuestion || "Unknown",
+        userAnswer: userInput,
+        reasoning: parsed.reasoningLog || [],
+        profileUpdate: parsed.profileUpdate || {},
+        updatedProfile: JSON.parse(JSON.stringify(session.profile)),
+      });
+      
   
-      // 🏁 If no next question → complete profiling
-      if (!parsed.nextQuestion) {
+      session.stepCount += 1;
+  
+      if (!parsed.nextQuestion || session.stepCount >= 20) {
         session.finished = true;
-        await db.collection("users").doc(userId).update({ tasteProfile: session.profile });
-        delete tasteSessionMap[userId];
+        await db.collection("users").doc(userId).update({
+          tasteProfile: session.profile,
+          tasteProfilerJourney: session.memory,
+        });
   
-        return res.json({ done: true, message: "Taste Profile completed!", profile: session.profile });
+        console.log("✅ Full Taste Journey Saved!", session.memory);
+  
+        return res.json({
+          done: true,
+          profile: session.profile,
+          memory: session.memory,
+        });
       }
   
-      // ➡️ Continue asking
-      return res.json({ done: false, nextQuestion: parsed.nextQuestion });
-  
+      return res.json({
+        done: false,
+        nextQuestion: parsed.nextQuestion,
+      });
     } catch (err) {
-      console.error("❌ Taste Profiler chat error:", err);
-      return res.status(500).json({ message: "Failed to handle chat." });
+      console.error("❌ handleTasteProfilerChat error:", err);
+      return res.status(500).json({ message: "Taste profiling failed." });
     }
   };
+  
+  
 
 const detectThreadBetweenUsers = async (req, res) => {
   try {
@@ -522,4 +572,4 @@ UserNote: ${memory.userNote}
   }
 };
 
-module.exports = { chatWithLunr, startTasteProfiler, handleTasteProfilerChat, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent };
+module.exports = { chatWithLunr, getTasteProfilerMemory, startTasteProfiler, handleTasteProfilerChat, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent };
