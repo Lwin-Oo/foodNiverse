@@ -4,16 +4,16 @@ import { FaRobot, FaTimes } from "react-icons/fa";
 import API from "../../utils/api";
 
 const AIAgentBubble = ({
-  mode = "manual",           // "manual" or "triggered"
-  partnerName = "",          // for triggered thread
-  aiMessage = "",            // optional GPT message
-  onConfirm = () => {},      // thread creation callback
-  onClose = () => {}         // close bubble callback
+  mode = "manual",
+  partnerName = "",
+  aiMessage = "",
+  onConfirm = () => {},
+  onClose = () => {}
 }) => {
   const [open, setOpen] = useState(mode === "triggered");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [chatSessionMode, setChatSessionMode] = useState("normal"); // normal | tasteProfiler
+  const [chatSessionMode, setChatSessionMode] = useState("normal");
   const [showMemory, setShowMemory] = useState(false);
   const [memoryData, setMemoryData] = useState([]);
 
@@ -25,17 +25,35 @@ const AIAgentBubble = ({
       ]);
     } else if (mode === "manual") {
       setMessages([
-        { sender: "ai", text: "Hi there 🌙 I'm Lunr — your Foodniverse assistant. Ask me anything!" },
-        { sender: "ai", text: "Or if you're ready, type **Start my Taste Journey** to begin building your unique Foodie Passport! 🍴" },
+        { sender: "ai", text: "Hi there 🌙 I'm Lunr — your Foodniverse assistant. How can I assist you!" },
       ]);
     }
   }, [mode, partnerName, aiMessage]);
 
+  const startTasteJourney = async () => {
+    try {
+      await API.post("/ai/taste-profiler/start");
+      setChatSessionMode("tasteProfiler");
+
+      setMessages(prev => [
+        ...prev,
+        { sender: "ai", text: "Awesome! Let's craft your unique Food Profile... 🍽️💬" }
+      ]);
+
+      const startQuestion = await API.post("/ai/taste-profiler/chat", { text: "start" });
+      setMessages(prev => [
+        ...prev,
+        { sender: "ai", text: startQuestion.data.nextQuestion }
+      ]);
+    } catch (err) {
+      console.error("❌ Taste journey start error:", err);
+    }
+  };
+
   const sendReply = async () => {
     if (!input.trim()) return;
     const userInput = input.trim();
-    const userMsg = { sender: "user", text: userInput };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => [...prev, { sender: "user", text: userInput }]);
     setInput("");
 
     try {
@@ -60,38 +78,17 @@ const AIAgentBubble = ({
           `.trim();
 
           setChatSessionMode("normal");
-
           setMessages(prev => [
             ...prev,
             { sender: "ai", text: "🎉 Done! Your Taste Passport is ready! Let's explore flavors perfect for you." },
             { sender: "ai", text: summary }
           ]);
         } else {
-          setMessages(prev => [
-            ...prev,
-            { sender: "ai", text: res.data.nextQuestion }
-          ]);
+          setMessages(prev => [...prev, { sender: "ai", text: res.data.nextQuestion }]);
         }
-
       } else {
-        if (userInput.toLowerCase().includes("start my taste journey")) {
-          await API.post("/ai/taste-profiler/start");
-          setChatSessionMode("tasteProfiler");
-
-          setMessages(prev => [
-            ...prev,
-            { sender: "ai", text: "Awesome! Let's craft your unique Food Profile... 🍽️💬" }
-          ]);
-
-          const startQuestion = await API.post("/ai/taste-profiler/chat", { text: "start" });
-          setMessages(prev => [
-            ...prev,
-            { sender: "ai", text: startQuestion.data.nextQuestion }
-          ]);
-        } else {
-          const res = await API.post("/ai/chat", { prompt: userInput });
-          setMessages(prev => [...prev, { sender: "ai", text: res.data.reply }]);
-        }
+        const res = await API.post("/ai/chat", { prompt: userInput });
+        setMessages(prev => [...prev, { sender: "ai", text: res.data.reply }]);
       }
     } catch (err) {
       console.error("❌ Lunr AI chat error:", err);
@@ -105,7 +102,7 @@ const AIAgentBubble = ({
       setMemoryData(res.data.memory);
       setShowMemory(true);
     } catch (err) {
-      console.error("❌ Failed to fetch Taste Memory:", err);
+      console.error("❌ Fetch Taste Memory failed:", err);
       setMessages(prev => [...prev, { sender: "ai", text: "Oops. Could not load your Taste Journey." }]);
     }
   };
@@ -126,7 +123,7 @@ const AIAgentBubble = ({
       {open ? (
         <div className="fixed bottom-5 right-5 w-80 bg-white shadow-2xl rounded-2xl border border-blue-200 z-[9999] flex flex-col overflow-hidden">
           <div className="bg-blue-600 text-white px-4 py-2 flex justify-between items-center">
-            <span>Lunr 🌙</span>
+            <span>Lunr</span>
             <FaTimes className="cursor-pointer" onClick={() => setOpen(false)} />
           </div>
 
@@ -136,6 +133,18 @@ const AIAgentBubble = ({
                 {msg.text}
               </div>
             ))}
+
+            {/* 👇 Show button if idle */}
+            {mode === "manual" && chatSessionMode === "normal" && (
+              <div className="mt-2 flex justify-center">
+                <button
+                  onClick={startTasteJourney}
+                  className="bg-blue-600 text-white text-xs px-4 py-2 rounded-full hover:bg-blue-700 transition"
+                >
+                  🍴 Start My Taste Journey
+                </button>
+              </div>
+            )}
 
             {/* 🚀 Taste Journey Timeline */}
             {showMemory && (
@@ -161,7 +170,7 @@ const AIAgentBubble = ({
             )}
           </div>
 
-          {mode === "manual" || chatSessionMode === "tasteProfiler" ? (
+          {(mode === "manual" || chatSessionMode === "tasteProfiler") ? (
             <div className="flex flex-col p-2 border-t">
               <div className="flex items-center">
                 <input
