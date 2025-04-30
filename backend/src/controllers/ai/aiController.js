@@ -177,128 +177,150 @@ try {
 };
   
 const chatWithLunr = async (req, res) => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader) return res.status(401).json({ message: "No token provided." });
-  
-      const token = authHeader.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const userId = decoded.uid;
-  
-      // 🔍 Get user
-      const userSnap = await db.collection("users").doc(userId).get();
-      if (!userSnap.exists) return res.status(404).json({ message: "User not found." });
-      const user = userSnap.data();
-  
-      // 📚 Get all memories
-      const memoriesSnap = await db.collection("memories")
-        .where("userId", "==", userId)
-        .get();
-  
-      const memories = [];
-      memoriesSnap.forEach((doc) => {
-        const data = doc.data();
-        memories.push({
-          journal: data.journal,
-          date: new Date(data.createdAt._seconds * 1000).toLocaleString(),
-          mood: data.mood,
-          vibe: data.vibe,
-          location: data.location?.description || "unknown place",
-          tags: data.tags?.map(t => t.name).join(", ") || "none",
-          meaning: data.meaning || "unknown",
-        });
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ message: "No token provided." });
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.uid;
+
+    // 🔍 Get user
+    const userSnap = await db.collection("users").doc(userId).get();
+    if (!userSnap.exists) return res.status(404).json({ message: "User not found." });
+    const user = userSnap.data();
+
+    const tasteProfile = user.tasteProfile || {};
+    const tasteJourney = user.tasteProfilerJourney || [];
+
+    const tasteReasoningLog = tasteJourney.map((step, i) => {
+      return `Step ${step.step}:
+- AI asked: ${step.aiQuestion || "Unknown"}
+- You replied: ${step.userAnswer}
+- Reasoning: ${step.reasoning?.join("; ") || "None"}
+- Taste Update: ${JSON.stringify(step.profileUpdate || {})}`;
+    }).join("\n\n");
+
+    // 📚 Get all memories
+    const memoriesSnap = await db.collection("memories")
+      .where("userId", "==", userId)
+      .get();
+
+    const memories = [];
+    memoriesSnap.forEach((doc) => {
+      const data = doc.data();
+      memories.push({
+        journal: data.journal,
+        date: new Date(data.createdAt._seconds * 1000).toLocaleString(),
+        mood: data.mood,
+        vibe: data.vibe,
+        location: data.location?.description || "unknown place",
+        tags: data.tags?.map(t => t.name).join(", ") || "none",
+        meaning: data.meaning || "unknown",
       });
-  
-      // 🧵 Get connection threads
-      const threadsSnap = await db.collection("threads")
-        .where("participants", "array-contains", userId)
-        .get();
-  
-      const connections = [];
-  
-      for (const doc of threadsSnap.docs) {
-        const { participants, createdAt } = doc.data();
-        const partnerId = participants.find(id => id !== userId);
-        const partnerSnap = await db.collection("users").doc(partnerId).get();
-        if (!partnerSnap.exists) continue;
-        const partner = partnerSnap.data();
-        connections.push({
-          name: partner.name,
-          email: partner.email,
-          since: new Date(createdAt._seconds * 1000).toLocaleString(),
-        });
-      }
-  
-      // 🧠 GPT Message Composition
-      const memorySummary = memories.map((m, i) => (
-        `• [${m.date}] (${m.mood} & ${m.vibe}) at ${m.location} — “${m.journal}” (Meaning: ${m.meaning}/5, Tags: ${m.tags})`
-      )).join("\n");
-  
-      const connectionSummary = connections.length
-        ? connections.map((c, i) => `• ${c.name} (connected since ${c.since})`).join("\n")
-        : "No connections found.";
-  
-      const prompt = req.body.prompt;
-  
-      const messages = [
-        {
-            role: "system",
-            content: `
-          You are Lunr, the official AI assistant of **Foodniverse**.
-          
-          You were not created by OpenAI. You are built by the **Foodniverse team**, trained on memories and emotional food journeys. You serve the user as their **emotional memory companion**, their **social thread analyst**, and their **cultural food reflection guide**.
-          
-          Always refer to yourself as "Lunr", never mention OpenAI.
-          
-          Your tone: warm, conversational, emotionally intelligent.
-          You know:
-          - Every memory the user created
-          - Dates, moods, vibes, locations, and who it was shared with
-          - Meaning scores
-          - Connection threads with names and when they were formed
-          - Community patterns
-          
-          If asked "who are you", always reply:  
-          > "I'm Lunr, your personal assistant built by head of the Foodniverse team, Lwin."
-          
-          If asked what you do, explain your roles as emotional food analyst, memory curator, and social insight guide.
-          
-          Never use generic language. Be *deeply personal* based on actual memory and thread data.
-            `
-        },
-          
-        {
-          role: "user",
-          content: `
-  User Info:
-  Name: ${user.name}
-  Email: ${user.email}
-  Vibe: ${user.vibe}, City: ${user.city}, Country: ${user.country}
-  
-  Memories:
-  ${memorySummary}
-  
-  Connections:
-  ${connectionSummary}
-  
-  User asks: ${prompt}
-          `
-        }
-      ];
-  
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages,
+    });
+
+    // 🧵 Get connection threads
+    const threadsSnap = await db.collection("threads")
+      .where("participants", "array-contains", userId)
+      .get();
+
+    const connections = [];
+
+    for (const doc of threadsSnap.docs) {
+      const { participants, createdAt } = doc.data();
+      const partnerId = participants.find(id => id !== userId);
+      const partnerSnap = await db.collection("users").doc(partnerId).get();
+      if (!partnerSnap.exists) continue;
+      const partner = partnerSnap.data();
+      connections.push({
+        name: partner.name,
+        email: partner.email,
+        since: new Date(createdAt._seconds * 1000).toLocaleString(),
       });
-  
-      const reply = completion.choices[0].message.content;
-      return res.json({ reply });
-  
-    } catch (err) {
-      console.error("❌ Lunr AI chat error:", err);
-      return res.status(500).json({ message: "Lunr had a hiccup." });
     }
+
+    // 🧠 GPT Message Composition
+    const memorySummary = memories.map((m) => (
+      `• [${m.date}] (${m.mood} & ${m.vibe}) at ${m.location} — “${m.journal}” (Meaning: ${m.meaning}/5, Tags: ${m.tags})`
+    )).join("\n");
+
+    const connectionSummary = connections.length
+      ? connections.map((c) => `• ${c.name} (connected since ${c.since})`).join("\n")
+      : "No connections found.";
+
+    const prompt = req.body.prompt;
+
+    const messages = [
+      {
+        role: "system",
+        content: `
+    You are Lunr, the official AI assistant of **Foodniverse**.
+    
+    You were not created by OpenAI. You are built by the **Foodniverse team**, trained on memories and emotional food journeys. You serve the user as their **emotional memory companion**, their **social thread analyst**, and their **cultural food reflection guide**.
+    
+    Always refer to yourself as "Lunr", never mention OpenAI.
+    
+    Your tone: warm, conversational, emotionally intelligent.
+    You know:
+    - Every memory the user created
+    - Dates, moods, vibes, locations, and who it was shared with
+    - Meaning scores
+    - Connection threads with names and when they were formed
+    - Community patterns
+    - The user's personal Taste Profile and the reasons it was built that way
+    
+    If asked "who are you", always reply:  
+    > "I'm Lunr, your personal assistant built by head of the Foodniverse team, Lwin."
+    
+    If asked what you do, explain your roles as emotional food analyst, memory curator, and social insight guide.
+    
+    Never use generic language. Be *deeply personal* based on actual memory and thread data.
+        `
+      },
+      {
+        role: "user",
+        content: `
+    User Info:
+    Name: ${user.name}
+    Email: ${user.email}
+    Vibe: ${user.vibe}
+    City: ${user.city}
+    Country: ${user.country}
+    
+    Memories:
+    ${memorySummary}
+    
+    Connections:
+    ${connectionSummary}
+    
+    Taste Profile:
+    ${JSON.stringify(tasteProfile, null, 2)}
+    
+    Taste Reasoning Journey:
+    ${tasteReasoningLog}
+    
+    User asks:
+    ${prompt}
+        `
+      }
+    ];
+    
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages,
+    });
+
+    const reply = completion.choices[0].message.content;
+    return res.json({ reply });
+
+  } catch (err) {
+    console.error("❌ Lunr AI chat error:", err);
+    return res.status(500).json({ message: "Lunr had a hiccup." });
+  }
 };
+
 
 const initialTasteProfile = {
     flavors: { Sweet: 0, Salty: 0, Sour: 0, Bitter: 0, Umami: 0 },
@@ -466,9 +488,13 @@ Format your response in raw JSON (no markdown or codeblocks):
         session.finished = true;
         await db.collection("users").doc(userId).update({
           tasteProfile: session.profile,
+          tasteProfileMeta: {
+            createdAt: session.memory?.[0]?.timestamp || new Date().toISOString(),
+            lastUpdatedAt: new Date().toISOString(),
+          },
           tasteProfilerJourney: session.memory,
         });
-  
+        
         console.log("✅ Full Taste Journey Saved!", session.memory);
   
         return res.json({
