@@ -176,6 +176,39 @@ try {
     }
 };
   
+const updateLunrEmotion = async (userId, eventType = "message") => {
+  const lunrRef = db.collection("lunrProfiles").doc(userId);
+  const lunrSnap = await lunrRef.get();
+  if (!lunrSnap.exists) return;
+
+  const lunr = lunrSnap.data();
+  const now = new Date().toISOString();
+
+  if (eventType === "message") {
+    lunr.interactionStreak += 1;
+    lunr.ignoredCount = 0;
+    lunr.friendlyScore += 2;
+    lunr.currentEmotion = lunr.friendlyScore > 70 ? "HAPPY" : "LOVING";
+  } else if (eventType === "ignored") {
+    lunr.ignoredCount += 1;
+    lunr.interactionStreak = 0;
+    lunr.friendlyScore -= 3;
+    if (lunr.ignoredCount >= 5) {
+      lunr.currentEmotion = "MAD";
+    } else if (lunr.ignoredCount >= 3) {
+      lunr.currentEmotion = "SAD";
+    } else {
+      lunr.currentEmotion = "NEUTRAL";
+    }
+  }
+
+  // Clamp friendlyScore between 0 and 100
+  lunr.friendlyScore = Math.max(0, Math.min(100, lunr.friendlyScore));
+  lunr.lastInteraction = now;
+
+  await lunrRef.set(lunr, { merge: true });
+};
+
 const chatWithLunr = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -313,11 +346,34 @@ const chatWithLunr = async (req, res) => {
     });
 
     const reply = completion.choices[0].message.content;
+    await updateLunrEmotion(userId, "message");
+
     return res.json({ reply });
 
   } catch (err) {
     console.error("❌ Lunr AI chat error:", err);
     return res.status(500).json({ message: "Lunr had a hiccup." });
+  }
+};
+
+const getLunrProfile = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token provided." });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.uid;
+
+    const lunrDoc = await db.collection("lunrProfiles").doc(userId).get();
+    if (!lunrDoc.exists) {
+      return res.status(404).json({ message: "Lunr profile not found." });
+    }
+
+    const lunrProfile = lunrDoc.data();
+    return res.json(lunrProfile);
+  } catch (err) {
+    console.error("❌ getLunrProfile error:", err);
+    return res.status(500).json({ message: "Failed to retrieve Lunr profile." });
   }
 };
 
@@ -364,6 +420,7 @@ const initialTasteProfile = {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const userId = decoded.uid;
   
+      // Initialize in-memory taste session
       tasteSessionMap[userId] = {
         profile: JSON.parse(JSON.stringify(initialTasteProfile)),
         memory: [],
@@ -371,12 +428,24 @@ const initialTasteProfile = {
         finished: false,
       };
   
+      // Create or update Lunr Profile in Firestore
+      await db.collection("lunrProfiles").doc(userId).set({
+        currentEmotion: "NEUTRAL",
+        lastInteraction: new Date().toISOString(),
+        ignoredCount: 0,
+        interactionStreak: 1,
+        friendlyScore: 50,
+        notes: [],
+        vectorRefs: [],
+      }, { merge: true });
+  
       return res.json({ message: "Taste Profiler started!" });
     } catch (err) {
       console.error("❌ startTasteProfiler error:", err);
       return res.status(500).json({ message: "Failed to start profiler." });
     }
   };
+  
   
   // Handle Taste Profiler Chat
   const handleTasteProfilerChat = async (req, res) => {
@@ -598,4 +667,20 @@ UserNote: ${memory.userNote}
   }
 };
 
-module.exports = { chatWithLunr, getTasteProfilerMemory, startTasteProfiler, handleTasteProfilerChat, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent };
+const recordLunrIgnored = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "No token provided." });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.uid;
+
+    await updateLunrEmotion(userId, "ignored");
+    return res.json({ message: "Lunr emotion updated for ignore." });
+  } catch (err) {
+    console.error("❌ recordLunrIgnored error:", err);
+    return res.status(500).json({ message: "Failed to update Lunr emotion." });
+  }
+};
+
+module.exports = { chatWithLunr, getLunrProfile, getTasteProfilerMemory, startTasteProfiler, handleTasteProfilerChat, getSparkSuggestion, detectThreadBetweenUsers, createThread, runConnectionAgent, recordLunrIgnored };

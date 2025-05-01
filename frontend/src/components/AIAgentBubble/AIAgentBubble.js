@@ -17,15 +17,57 @@ const AIAgentBubble = ({
   const [showMemory, setShowMemory] = useState(false);
   const [memoryData, setMemoryData] = useState([]);
 
+  const trackIgnoredLunr = async () => {
+    try {
+      await API.post("/ai/lunr/ignored");
+    } catch (err) {
+      console.error("❌ Failed to update Lunr emotion on ignore.");
+    }
+  };
+
+  const fetchLunrEmotion = async () => {
+    try {
+      const res = await API.get("/ai/lunr-profile");
+      const emotion = res.data.currentEmotion || "NEUTRAL";
+      const greetings = {
+        NEUTRAL: "Hi there 🌙 I'm Lunr — your Foodniverse assistant.",
+        HAPPY: "Hey! 😊 I’ve been looking forward to chatting again!",
+        FRIENDLY: "You’re back! 💙 Ready to explore?",
+        SAD: "I thought you forgot about me... 😢",
+        MAD: "Took you long enough! Just kidding. Maybe. 😤",
+        EXCITED: "Yessss! Let’s go discover deliciousness! ✨",
+        LOVING: "You're my favorite person to talk food with 💖 Let’s make this moment special!"
+      };
+      setMessages([{ sender: "ai", text: greetings[emotion] }]);
+
+      // passive attention-seeking
+      if ((emotion === "SAD" || emotion === "ANGRY") && !open) {
+        setTimeout(() => {
+          setOpen(true);
+          setMessages(prev => [
+            ...prev,
+            {
+              sender: "ai",
+              text:
+                emotion === "SAD"
+                  ? "Hey... are we still food buddies? 😢"
+                  : "You’ve been ghosting me. Not cool 😤"
+            }
+          ]);
+        }, 10000);
+      }
+    } catch (err) {
+      console.error("Failed to fetch Lunr emotion.");
+      setMessages([{ sender: "ai", text: "Hi there 🌙 I'm Lunr — your Foodniverse assistant." }]);
+    }
+  };
+
   useEffect(() => {
+    if (mode === "manual") fetchLunrEmotion();
     if (mode === "triggered" && partnerName) {
       setMessages([
         { sender: "ai", text: `Hey 👋 I noticed you and ${partnerName} have shared meaningful memories.` },
         { sender: "ai", text: aiMessage || `Would you like me to start a private thread for you two?` },
-      ]);
-    } else if (mode === "manual") {
-      setMessages([
-        { sender: "ai", text: "Hi there 🌙 I'm Lunr — your Foodniverse assistant. How can I assist you!" },
       ]);
     }
   }, [mode, partnerName, aiMessage]);
@@ -34,17 +76,9 @@ const AIAgentBubble = ({
     try {
       await API.post("/ai/taste-profiler/start");
       setChatSessionMode("tasteProfiler");
-
-      setMessages(prev => [
-        ...prev,
-        { sender: "ai", text: "Awesome! Let's craft your unique Food Profile... 🍽️💬" }
-      ]);
-
+      setMessages(prev => [...prev, { sender: "ai", text: "Awesome! Let's craft your unique Food Profile... 🍽️💬" }]);
       const startQuestion = await API.post("/ai/taste-profiler/chat", { text: "start" });
-      setMessages(prev => [
-        ...prev,
-        { sender: "ai", text: startQuestion.data.nextQuestion }
-      ]);
+      setMessages(prev => [...prev, { sender: "ai", text: startQuestion.data.nextQuestion }]);
     } catch (err) {
       console.error("❌ Taste journey start error:", err);
     }
@@ -59,24 +93,9 @@ const AIAgentBubble = ({
     try {
       if (chatSessionMode === "tasteProfiler") {
         const res = await API.post("/ai/taste-profiler/chat", { text: userInput });
-
         if (res.data.done) {
           const profile = res.data.profile;
-
-          const summary = `
-🌟 Here's your Taste Passport:
-
-- Flavors: ${Object.entries(profile.flavors).map(([k, v]) => `${k}: ${v}`).join(", ")}
-- Aromas: ${Object.entries(profile.aromas).map(([k, v]) => `${k}: ${v}`).join(", ")}
-- Textures: ${Object.entries(profile.textures).map(([k, v]) => `${k}: ${v}`).join(", ")}
-- Temperatures: ${Object.entries(profile.temperatures).map(([k, v]) => `${k}: ${v}`).join(", ")}
-- Cultural Focus: ${profile.culturalFocus}
-- Exploration Tendency: ${profile.explorationTendency}
-- Dietary Restrictions: ${profile.dietaryRestrictions.length ? profile.dietaryRestrictions.join(", ") : "None"}
-
-🎯 You're ready to discover amazing food!
-          `.trim();
-
+          const summary = `\n🌟 Here's your Taste Passport:\n\n- Flavors: ${Object.entries(profile.flavors).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Aromas: ${Object.entries(profile.aromas).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Textures: ${Object.entries(profile.textures).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Temperatures: ${Object.entries(profile.temperatures).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Cultural Focus: ${profile.culturalFocus}\n- Exploration Tendency: ${profile.explorationTendency}\n- Dietary Restrictions: ${profile.dietaryRestrictions.length ? profile.dietaryRestrictions.join(", ") : "None"}\n\n🎯 You're ready to discover amazing food!`;
           setChatSessionMode("normal");
           setMessages(prev => [
             ...prev,
@@ -124,7 +143,10 @@ const AIAgentBubble = ({
         <div className="fixed bottom-5 right-5 w-80 bg-white shadow-2xl rounded-2xl border border-blue-200 z-[9999] flex flex-col overflow-hidden">
           <div className="bg-blue-600 text-white px-4 py-2 flex justify-between items-center">
             <span>Lunr</span>
-            <FaTimes className="cursor-pointer" onClick={() => setOpen(false)} />
+            <FaTimes className="cursor-pointer" onClick={() => {
+              setOpen(false);
+              trackIgnoredLunr();
+            }} />
           </div>
 
           <div className="p-3 space-y-2 overflow-y-auto max-h-72">
@@ -134,7 +156,6 @@ const AIAgentBubble = ({
               </div>
             ))}
 
-            {/* 👇 Show button if idle */}
             {mode === "manual" && chatSessionMode === "normal" && (
               <div className="mt-2 flex justify-center">
                 <button
@@ -146,7 +167,6 @@ const AIAgentBubble = ({
               </div>
             )}
 
-            {/* 🚀 Taste Journey Timeline */}
             {showMemory && (
               <div className="mt-4 border-t pt-3">
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">📜 Your Taste Journey:</h3>
