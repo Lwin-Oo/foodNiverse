@@ -474,14 +474,14 @@ Format your response in raw JSON (no markdown or codeblocks):
       // Save memory
       session.memory.push({
         step: session.stepCount + 1,
-        aiQuestion: lastStep?.nextQuestion || "Unknown",
+        aiQuestion: parsed.nextQuestion || "Unknown",
         userAnswer: userInput,
         reasoning: parsed.reasoningLog || [],
         profileUpdate: parsed.profileUpdate || {},
         updatedProfile: JSON.parse(JSON.stringify(session.profile)),
+        timestamp: new Date().toISOString(),
       });
       
-  
       session.stepCount += 1;
   
       if (!parsed.nextQuestion || session.stepCount >= 20) {
