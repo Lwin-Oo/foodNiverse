@@ -1,0 +1,64 @@
+.lunr-neutral {
+    animation: subtle-blink 4s infinite;
+  }
+  
+  .lunr-happy {
+    animation: bounce 0.6s infinite alternate;
+  }
+  
+  .lunr-friendly {
+    animation: float 3s ease-in-out infinite;
+  }
+  
+  .lunr-sad {
+    animation: droop 2s infinite alternate;
+  }
+  
+  .lunr-mad {
+    animation: shake 0.3s infinite;
+  }
+  
+  .lunr-excited {
+    animation: pulse 1s infinite;
+  }
+  
+  .lunr-loving {
+    animation: heartbeat 1.5s infinite;
+  }
+  
+  @keyframes bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-6px); }
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  
+  @keyframes droop {
+    0% { transform: translateY(0) rotate(0deg); }
+    100% { transform: translateY(4px) rotate(-5deg); }
+  }
+  
+  @keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    50% { transform: translateX(3px); }
+    75% { transform: translateX(-3px); }
+    100% { transform: translateX(0); }
+  }
+  
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  
+  @keyframes heartbeat {
+    0% { transform: scale(1); }
+    14% { transform: scale(1.2); }
+    28% { transform: scale(1); }
+    42% { transform: scale(1.2); }
+    70% { transform: scale(1); }
+  }
+  

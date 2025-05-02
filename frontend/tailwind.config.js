@@ -3,28 +3,25 @@ module.exports = {
   theme: {
     extend: {
       animation: {
-        pulseSlow: "pulse 4s ease-in-out infinite",
-        floatSlow: "floatSlow 6s ease-in-out infinite",
-        fadeInSlow: "fadeInSlow 1.5s ease-out forwards",
-        twinkle: "twinkle 2s ease-in-out infinite",
+        float: "float 3s ease-in-out infinite",
+        blink: "blink 1.5s infinite",
+        sadFloat: "sadFloat 4s ease-in-out infinite",
       },
       keyframes: {
-        floatSlow: {
+        float: {
           "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-10px)" },
+          "50%": { transform: "translateY(-8px)" },
         },
-        fadeInSlow: {
-          from: { opacity: "0", transform: "translateY(10px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
+        sadFloat: {
+          "0%, 100%": { transform: "translateY(0) scale(1)" },
+          "50%": { transform: "translateY(4px) scale(0.98)" },
         },
-        twinkle: {
-          "0%, 100%": { opacity: "0.2" },
-          "50%": { opacity: "1" },
+        blink: {
+          "0%, 100%": { transform: "scaleY(1)" },
+          "50%": { transform: "scaleY(0.1)" },
         },
       },
     },
-    
-    
   },
   plugins: [],
 };

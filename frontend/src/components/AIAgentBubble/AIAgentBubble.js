@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { FaRobot, FaTimes } from "react-icons/fa";
+import { FaTimes } from "react-icons/fa";
+import LunrAvatar from "../LunrAvatar/LunrAvatar";
 import API from "../../utils/api";
 
 const AIAgentBubble = ({
@@ -16,6 +17,7 @@ const AIAgentBubble = ({
   const [chatSessionMode, setChatSessionMode] = useState("normal");
   const [showMemory, setShowMemory] = useState(false);
   const [memoryData, setMemoryData] = useState([]);
+  const [currentEmotion, setCurrentEmotion] = useState("NEUTRAL");
 
   const trackIgnoredLunr = async () => {
     try {
@@ -25,10 +27,12 @@ const AIAgentBubble = ({
     }
   };
 
-  const fetchLunrEmotion = async () => {
+  const fetchLunrEmotion = async (initial = false) => {
     try {
       const res = await API.get("/ai/lunr-profile");
       const emotion = res.data.currentEmotion || "NEUTRAL";
+      setCurrentEmotion(emotion);
+  
       const greetings = {
         NEUTRAL: "Hi there 🌙 I'm Lunr — your Foodniverse assistant.",
         HAPPY: "Hey! 😊 I’ve been looking forward to chatting again!",
@@ -38,10 +42,12 @@ const AIAgentBubble = ({
         EXCITED: "Yessss! Let’s go discover deliciousness! ✨",
         LOVING: "You're my favorite person to talk food with 💖 Let’s make this moment special!"
       };
-      setMessages([{ sender: "ai", text: greetings[emotion] }]);
-
-      // passive attention-seeking
-      if ((emotion === "SAD" || emotion === "ANGRY") && !open) {
+  
+      if (initial) {
+        setMessages([{ sender: "ai", text: greetings[emotion] }]);
+      }
+  
+      if ((emotion === "SAD" || emotion === "MAD") && !open) {
         setTimeout(() => {
           setOpen(true);
           setMessages(prev => [
@@ -58,12 +64,15 @@ const AIAgentBubble = ({
       }
     } catch (err) {
       console.error("Failed to fetch Lunr emotion.");
-      setMessages([{ sender: "ai", text: "Hi there 🌙 I'm Lunr — your Foodniverse assistant." }]);
+      if (initial) {
+        setMessages([{ sender: "ai", text: "Hi there 🌙 I'm Lunr — your Foodniverse assistant." }]);
+      }
     }
   };
+  
 
   useEffect(() => {
-    if (mode === "manual") fetchLunrEmotion();
+    if (mode === "manual") fetchLunrEmotion(true);
     if (mode === "triggered" && partnerName) {
       setMessages([
         { sender: "ai", text: `Hey 👋 I noticed you and ${partnerName} have shared meaningful memories.` },
@@ -89,17 +98,19 @@ const AIAgentBubble = ({
     const userInput = input.trim();
     setMessages(prev => [...prev, { sender: "user", text: userInput }]);
     setInput("");
-
+  
     try {
       if (chatSessionMode === "tasteProfiler") {
         const res = await API.post("/ai/taste-profiler/chat", { text: userInput });
+        await fetchLunrEmotion(false); // 🧠 Update emotion after reply
+  
         if (res.data.done) {
           const profile = res.data.profile;
-          const summary = `\n🌟 Here's your Taste Passport:\n\n- Flavors: ${Object.entries(profile.flavors).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Aromas: ${Object.entries(profile.aromas).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Textures: ${Object.entries(profile.textures).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Temperatures: ${Object.entries(profile.temperatures).map(([k, v]) => `${k}: ${v}`).join(", ")}\n- Cultural Focus: ${profile.culturalFocus}\n- Exploration Tendency: ${profile.explorationTendency}\n- Dietary Restrictions: ${profile.dietaryRestrictions.length ? profile.dietaryRestrictions.join(", ") : "None"}\n\n🎯 You're ready to discover amazing food!`;
+          const summary = `🌟 Here's your Taste Passport:\n\n...`;
           setChatSessionMode("normal");
           setMessages(prev => [
             ...prev,
-            { sender: "ai", text: "🎉 Done! Your Taste Passport is ready! Let's explore flavors perfect for you." },
+            { sender: "ai", text: "🎉 Done! Your Taste Passport is ready!" },
             { sender: "ai", text: summary }
           ]);
         } else {
@@ -108,12 +119,14 @@ const AIAgentBubble = ({
       } else {
         const res = await API.post("/ai/chat", { prompt: userInput });
         setMessages(prev => [...prev, { sender: "ai", text: res.data.reply }]);
+        await fetchLunrEmotion(false); // 🧠 Update emotion after reply
       }
     } catch (err) {
       console.error("❌ Lunr AI chat error:", err);
-      setMessages(prev => [...prev, { sender: "ai", text: "Oops. Something went wrong, try again later." }]);
+      setMessages(prev => [...prev, { sender: "ai", text: "Oops. Something went wrong." }]);
     }
   };
+  
 
   const fetchTasteMemory = async () => {
     try {
@@ -140,9 +153,12 @@ const AIAgentBubble = ({
   return createPortal(
     <>
       {open ? (
-        <div className="fixed bottom-5 right-5 w-80 bg-white shadow-2xl rounded-2xl border border-blue-200 z-[9999] flex flex-col overflow-hidden">
+        <div className="fixed bottom-5 right-5 w-80 bg-white shadow-2xl rounded-2xl border  z-[9999] flex flex-col overflow-hidden">
           <div className="bg-blue-600 text-white px-4 py-2 flex justify-between items-center">
-            <span>Lunr</span>
+            <span className="flex items-center gap-2">
+              <LunrAvatar emotion={currentEmotion} size={8} />
+              <span>Lunr</span>
+            </span>
             <FaTimes className="cursor-pointer" onClick={() => {
               setOpen(false);
               trackIgnoredLunr();
@@ -227,11 +243,12 @@ const AIAgentBubble = ({
         </div>
       ) : (
         <button
-          className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-xl z-[9999]"
-          onClick={() => setOpen(true)}
-        >
-          <FaRobot size={20} />
-        </button>
+  className="fixed bottom-6 right-6 bg-[#f6f0ff] hover:bg-[#e7ddfb] text-[#5b3a91] p-4 rounded-full shadow-lg border border-[#d5c8f5] transition-colors duration-300 z-[9999]"
+  onClick={() => setOpen(true)}
+>
+  <LunrAvatar emotion={currentEmotion} size={8} />
+</button>
+
       )}
     </>,
     document.body
